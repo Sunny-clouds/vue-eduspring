@@ -73,6 +73,11 @@ export const uploadApi = {
 
     return request.post('/api/upload/upload', formData, {
       baseURL: '',
+      // 大文件上传不使用全局 10s 超时，避免传输过程中被前端中断。
+      timeout: 0,
+      // 兼容 axios 在部分运行时对体积限制的检查。
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
       headers: {
         'Content-Type': 'multipart/form-data'
       }

@@ -58,6 +58,7 @@ instance.interceptors.response.use(
 
     // 提供更详细的错误信息
     const errorMessage = error.response?.data?.msg ||
+                        (status === 413 ? '上传文件过大，请联系管理员调整服务端上传大小限制' : '') ||
                         (status === 403 ? '当前账号无权访问该接口' : '') ||
                         error.message ||
                         '网络请求失败，请检查后端服务是否运行'

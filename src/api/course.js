@@ -35,6 +35,33 @@ export const courseApi = {
     return request.delete(`/course/del/${id}`)
   },
 
+  // ========== 课程资源相关 ==========
+
+  // 根据课程ID获取课程资源
+  getCourseResourceById(courseId) {
+    const normalizedCourseId = Number(courseId)
+    return request.get(`/api/courseResource/getCourseResourceById/${courseId}`, {
+      params: {
+        courseId: Number.isFinite(normalizedCourseId) ? normalizedCourseId : courseId
+      },
+      baseURL: ''
+    })
+  },
+
+  // 上传课程资源（仅管理员/教师）
+  saveCourseResource(data) {
+    return request.post('/api/courseResource/save', data, {
+      baseURL: ''
+    })
+  },
+
+  // 删除课程资源（仅管理员/教师）
+  deleteCourseResource(id) {
+    return request.delete(`/api/courseResource/del/${id}`, {
+      baseURL: ''
+    })
+  },
+
   // ========== 选课相关（调用studentCourse接口） ==========
 
   // 选课（依赖于studentCourse模块）

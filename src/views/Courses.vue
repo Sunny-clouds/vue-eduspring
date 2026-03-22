@@ -30,6 +30,8 @@
             stripe
             style="width: 100%"
             v-loading="allCoursesLoading"
+            :row-class-name="() => 'clickable-course-row'"
+            @row-click="handleAllCourseRowClick"
           >
             <el-table-column prop="displayId" label="ID" width="80" />
             <el-table-column prop="title" label="课程名称" min-width="150" />
@@ -38,8 +40,8 @@
             <el-table-column prop="createTime" label="创建时间" width="180" />
             <el-table-column v-if="canManageCourses" label="课程管理" width="180" align="center" fixed="right">
               <template #default="scope">
-                <el-button type="primary" size="small" @click="openEditDialog(scope.row)">编辑</el-button>
-                <el-button type="danger" size="small" @click="handleDeleteCourse(scope.row.backendId)">删除</el-button>
+                <el-button type="primary" size="small" @click.stop="openEditDialog(scope.row)">编辑</el-button>
+                <el-button type="danger" size="small" @click.stop="handleDeleteCourse(scope.row.backendId)">删除</el-button>
               </template>
             </el-table-column>
             <el-table-column v-if="isStudent" label="操作" width="120" align="center" fixed="right">
@@ -47,7 +49,7 @@
                 <el-button
                   type="primary"
                   size="small"
-                  @click="handleSelectCourse(scope.row.backendId)"
+                  @click.stop="handleSelectCourse(scope.row.backendId)"
                   :loading="selectingCourse === scope.row.backendId"
                 >
                   选课
@@ -78,6 +80,8 @@
             stripe
             style="width: 100%"
             v-loading="myCoursesLoading"
+            :row-class-name="() => 'clickable-course-row'"
+            @row-click="handleMyCourseRowClick"
           >
             <el-table-column prop="displayId" label="ID" width="80" />
             <el-table-column prop="userName" label="学生" min-width="120" />
@@ -91,7 +95,7 @@
                 <el-button
                   type="danger"
                   size="small"
-                  @click="handleDropCourse(scope.row.backendId)"
+                  @click.stop="handleDropCourse(scope.row.backendId)"
                   :loading="droppingCourse === scope.row.backendId"
                 >
                   退课
@@ -199,6 +203,7 @@
 
 <script setup name="CoursesPage">
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { courseApi } from '@/api/course'
 import { studentCourseApi } from '@/api/studentCourse'
 import { userApi } from '@/api/user'
@@ -207,6 +212,7 @@ import { normalizeTableData, addDisplayId } from '@/utils/table'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const userStore = useUserStore()
+const router = useRouter()
 // 角色能力开关：学生可选/退课，教师和管理员可管理课程。
 const isStudent = computed(() => userStore.isStudent)
 const isAdmin = computed(() => userStore.isAdmin)
@@ -228,6 +234,7 @@ const allCoursesDisplay = computed(() => {
 
   return addDisplayId(sortedRows, allCoursesPage.value, pageSize.value, (item) => ({
     ...item,
+    courseId: item.id,
     backendId: item.id
   }))
 })
@@ -243,6 +250,7 @@ const allSelectionsDisplay = computed(() => {
 const allCoursesLoading = ref(false)
 const myCoursesLoading = ref(false)
 const allSelectionsLoading = ref(false)
+const myCoursesLoaded = ref(false)
 const selectingCourse = ref(null)
 const droppingCourse = ref(null)
 
@@ -297,6 +305,33 @@ const formatCourseStatus = (status) => {
   }
   return '-'
 }
+
+const resolveCourseId = (course = {}) => {
+  const id = Number(course.courseId)
+  return Number.isFinite(id) ? id : null
+}
+
+const selectedCourseIdSet = computed(() => {
+  const set = new Set()
+  myCourses.value.forEach((item) => {
+    const id = resolveCourseId(item)
+    if (id !== null) {
+      set.add(id)
+    }
+  })
+  return set
+})
+
+const selectedCourseTitleSet = computed(() => {
+  const set = new Set()
+  myCourses.value.forEach((item = {}) => {
+    const title = String(item.title || item.courseTitle || item.courseName || '').trim()
+    if (title) {
+      set.add(title)
+    }
+  })
+  return set
+})
 
 const normalizeTeacherOptions = (data) => {
   // teacherList 接口在不同环境返回结构不一致，这里统一成 { id, label }。
@@ -408,6 +443,7 @@ const loadMyCourses = async () => {
       const { rows, total } = normalizeTableData(response.data)
       myCourses.value = rows.map(item => ({
         ...item,
+        courseId: item.courseId,
         userName: item.userName || item.username || '-',
         title: item.title || item.courseTitle || item.courseName || '-',
         teacherName: item.teacherName || item.teacher || '-',
@@ -418,6 +454,7 @@ const loadMyCourses = async () => {
           : `${item.progress}%`
       }))
       myCoursesTotal.value = total || rows.length
+      myCoursesLoaded.value = true
     } else {
       ElMessage.error(response.msg || '获取选课列表失败')
     }
@@ -677,9 +714,66 @@ const handleDropCourse = async (courseId) => {
   }
 }
 
+const ensureStudentCanEnterCourse = async (course) => {
+  if (!isStudent.value) {
+    return true
+  }
+
+  if (!myCoursesLoaded.value) {
+    await loadMyCourses()
+  }
+
+  const courseId = resolveCourseId(course)
+  const courseTitle = String(course?.title || course?.courseTitle || '').trim()
+
+  if (courseId !== null && selectedCourseIdSet.value.has(courseId)) {
+    return true
+  }
+
+  if (courseTitle && selectedCourseTitleSet.value.has(courseTitle)) {
+    return true
+  }
+
+  ElMessage.warning('仅可进入已选课课程学习')
+  return false
+}
+
+const enterCourseLearning = async (course) => {
+  const courseId = resolveCourseId(course)
+  if (courseId === null) {
+    ElMessage.warning('课程ID无效，无法进入学习页')
+    return
+  }
+
+  const allowed = await ensureStudentCanEnterCourse(course)
+  if (!allowed) {
+    return
+  }
+
+  router.push({
+    name: 'CourseLearn',
+    params: { id: courseId },
+    query: {
+      title: String(course?.title || course?.courseTitle || ''),
+      teacherName: String(course?.teacherName || course?.teacher || '')
+    }
+  })
+}
+
+const handleAllCourseRowClick = (row) => {
+  enterCourseLearning(row)
+}
+
+const handleMyCourseRowClick = (row) => {
+  enterCourseLearning(row)
+}
+
 onMounted(() => {
   resetCourseForm()
   loadAllCourses()
+  if (isStudent.value) {
+    loadMyCourses()
+  }
 })
 </script>
 
@@ -796,6 +890,10 @@ onMounted(() => {
 .courses-container :deep(.el-table__body tr) {
   background-color: white;
   transition: all 0.3s ease;
+}
+
+.courses-container :deep(.clickable-course-row) {
+  cursor: pointer;
 }
 
 .courses-container :deep(.el-tabs__header) {

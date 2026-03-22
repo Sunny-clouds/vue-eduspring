@@ -89,7 +89,7 @@ const handleLogin = async () => {
 
     if (result.success) {
       ElMessage.success('登录成功')
-      router.push('/home')
+      router.push(userStore.isAdmin ? '/admin' : '/home')
     } else {
       ElMessage.error(result.message || 'Network Error')
     }

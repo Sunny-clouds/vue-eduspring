@@ -16,7 +16,16 @@
         </div>
         <div class="discussion-actions">
           <el-button class="stat-btn" type="primary" plain @click="handlePostLike" :loading="likingPost">
-            <span class="heart-icon" aria-hidden="true">❤</span>
+            <svg class="heart-icon" viewBox="0 0 1024 1024" aria-hidden="true">
+              <path
+                d="M512 896L176 560c-82-82-82-216 0-298s216-82 298 0l38 38 38-38c82-82 216-82 298 0s82 216 0 298L512 896z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="64"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
             <span>{{ Number(discussion.likeCount || 0) }}</span>
           </el-button>
           <div class="stat-display">
@@ -40,10 +49,16 @@
           :depth="0"
           :liking-comment-id="likingCommentId"
           :deleting-comment-id="deletingCommentId"
+          :replying-comment-id="replyingToCommentId"
+          :reply-draft="replyContent"
+          :sending-reply="sendingReply"
           :can-delete-reply="canDeleteReply"
           @like="handleCommentLike"
           @reply="handlePrepareReply"
           @delete="handleDeleteComment"
+          @update-reply-draft="updateInlineReplyDraft"
+          @submit-reply="handleSendInlineReply"
+          @cancel-reply="clearReplyTarget"
         />
 
         <el-empty
@@ -68,22 +83,18 @@
       <el-divider />
 
       <div class="reply-form">
-        <div v-if="replyingToCommentId" class="reply-target-tip">
-          正在回复 {{ replyingToCommentAuthor || '该评论' }}
-          <el-button type="primary" link @click="clearReplyTarget">取消</el-button>
-        </div>
         <el-input
-          v-model="replyContent"
+          v-model="rootReplyContent"
           type="textarea"
           rows="4"
-          :placeholder="replyingToCommentId ? '请输入回复内容（将作为子评论）' : '请输入回复内容'"
+          placeholder="写下你的评论..."
           maxlength="500"
           show-word-limit
         />
         <el-button
           type="primary"
           style="margin-top: 10px"
-          @click="handleSendReply"
+          @click="handleSendRootReply"
           :loading="sendingReply"
         >
           发送回复
@@ -94,7 +105,7 @@
 </template>
 
 <script setup name="DiscussionDetailPage">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { discussionApi } from '@/api/discussion'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -115,8 +126,8 @@ const likingPost = ref(false)
 const likingCommentId = ref(null)
 const deletingCommentId = ref(null)
 const replyContent = ref('')
+const rootReplyContent = ref('')
 const replyingToCommentId = ref(0)
-const replyingToCommentAuthor = ref('')
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -169,9 +180,9 @@ const loadReplies = async () => {
   }
 }
 
-const handleSendReply = async () => {
+const sendReply = async ({ parentId = 0, contentSource = '' } = {}) => {
   // 提交前做最小输入校验，避免发送空内容。
-  const content = String(replyContent.value || '').trim()
+  const content = String(contentSource || '').trim()
   if (!content) {
     ElMessage.warning('请输入回复内容')
     return
@@ -189,13 +200,17 @@ const handleSendReply = async () => {
       postId: Number(discussionId),
       userId: currentUserId,
       // parentId=0 表示一级评论；>0 表示回复某条评论。
-      parentId: Number(replyingToCommentId.value || 0),
+      parentId: Number(parentId || 0),
       content
     })
     if (response?.code === 1) {
       ElMessage.success('回复成功')
-      replyContent.value = ''
-      clearReplyTarget()
+      if (Number(parentId || 0) > 0) {
+        replyContent.value = ''
+        clearReplyTarget()
+      } else {
+        rootReplyContent.value = ''
+      }
       await loadReplies()
       await loadDiscussionDetail()
     } else {
@@ -208,19 +223,53 @@ const handleSendReply = async () => {
   }
 }
 
+const handleSendInlineReply = async () => {
+  await sendReply({
+    parentId: Number(replyingToCommentId.value || 0),
+    contentSource: replyContent.value
+  })
+}
+
+const handleSendRootReply = async () => {
+  await sendReply({
+    parentId: 0,
+    contentSource: rootReplyContent.value
+  })
+}
+
 const handlePrepareReply = (reply) => {
   if (!reply || reply.id === undefined || reply.id === null) {
     return
   }
   // 记录被回复目标，供提交时生成 parentId。
   replyingToCommentId.value = Number(reply.id)
-  replyingToCommentAuthor.value = reply.username || '该评论'
+  replyContent.value = ''
+
+  nextTick(() => {
+    const target = document.getElementById(`inline-reply-${reply.id}`)
+    if (!target) {
+      return
+    }
+
+    target.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    })
+
+    const input = target.querySelector('textarea')
+    if (input && typeof input.focus === 'function') {
+      input.focus()
+    }
+  })
+}
+
+const updateInlineReplyDraft = (value) => {
+  replyContent.value = String(value || '')
 }
 
 const clearReplyTarget = () => {
   // 恢复为发布一级评论状态。
   replyingToCommentId.value = 0
-  replyingToCommentAuthor.value = ''
 }
 
 const handlePostLike = async () => {
@@ -421,7 +470,9 @@ onMounted(() => {
 }
 
 .heart-icon {
-  color: #f56c6c;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
   font-size: 14px;
   line-height: 1;
 }
@@ -457,6 +508,9 @@ onMounted(() => {
 }
 
 .replies-list {
+  padding: 4px 6px;
+  background: #ffffff;
+  border-radius: 10px;
   margin-bottom: 30px;
   animation: fadeIn 0.8s ease-out 0.3s backwards;
 }
