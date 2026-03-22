@@ -1,24 +1,28 @@
 # vue-spring
 
-## Project setup
+## 安装依赖
 ```
 npm install
 ```
 
-### Compiles and hot-reloads for development
+### 运行
 ```
 npm run serve
 ```
 
-### Compiles and minifies for production
-```
-npm run build
-```
+# 在线教育系统（前端）
 
-### Lints and fixes files
-```
-npm run lint
-```
+## 技术栈
+- Vue3
+- Vite
+- Axios
+- Pinia
 
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+## 功能
+- 课程展示
+- 视频播放
+- 评论互动
+- 登录注册
+
+## 后端接口
+http://localhost:8080
