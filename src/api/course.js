@@ -35,31 +35,26 @@ export const courseApi = {
     return request.delete(`/course/del/${id}`)
   },
 
+  // 根据教师 ID 查询课程
+  getByTeaId(id) {
+    return request.get(`/course/getByTeaId/${id}`)
+  },
+
   // ========== 课程资源相关 ==========
 
   // 根据课程ID获取课程资源
   getCourseResourceById(courseId) {
-    const normalizedCourseId = Number(courseId)
-    return request.get(`/api/courseResource/getCourseResourceById/${courseId}`, {
-      params: {
-        courseId: Number.isFinite(normalizedCourseId) ? normalizedCourseId : courseId
-      },
-      baseURL: ''
-    })
+    return request.get(`/courseResource/getCourseResourceById/${courseId}`)
   },
 
   // 上传课程资源（仅管理员/教师）
   saveCourseResource(data) {
-    return request.post('/api/courseResource/save', data, {
-      baseURL: ''
-    })
+    return request.post('/courseResource/save', data)
   },
 
   // 删除课程资源（仅管理员/教师）
   deleteCourseResource(id) {
-    return request.delete(`/api/courseResource/del/${id}`, {
-      baseURL: ''
-    })
+    return request.delete(`/courseResource/del/${id}`)
   },
 
   // ========== 选课相关（调用studentCourse接口） ==========
@@ -72,6 +67,27 @@ export const courseApi = {
   // 退课（依赖于studentCourse模块）
   dropCourse(id) {
     return request.delete(`/studentCourse/delByUserName/${id}`)
+  },
+
+  // 兼容旧调用命名
+  getCourseByTitle(title, pageNum = 1, pageSize = 10) {
+    return request.get('/course/getByTitle', { params: { title, pageNum, pageSize } })
+  },
+
+  addCourse(data) {
+    return request.post('/course/save', data)
+  },
+
+  deleteCourse(id) {
+    return request.delete(`/course/del/${id}`)
+  },
+
+  getCourseResources(courseId) {
+    return request.get(`/courseResource/getCourseResourceById/${courseId}`)
+  },
+
+  deleteResource(id) {
+    return request.delete(`/courseResource/del/${id}`)
   }
 }
 

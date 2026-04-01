@@ -36,6 +36,10 @@
               <el-icon><ChatDotRound /></el-icon>
               <template #title>讨论管理</template>
             </el-menu-item>
+            <el-menu-item index="/question-bank">
+              <el-icon><Reading /></el-icon>
+              <template #title>题库管理</template>
+            </el-menu-item>
             <el-menu-item index="/profile">
               <el-icon><Setting /></el-icon>
               <template #title>个人设置</template>
@@ -110,6 +114,7 @@
             <el-menu-item index="/courses">课程</el-menu-item>
             <el-menu-item index="/scores">成绩</el-menu-item>
             <el-menu-item index="/discussion">讨论</el-menu-item>
+            <el-menu-item v-if="userStore.isTeacher" index="/question-bank">题库</el-menu-item>
             <el-menu-item index="/profile">个人中心</el-menu-item>
           </el-menu>
           <div class="nav-user">
@@ -184,13 +189,14 @@ const activeMenu = computed(() => {
   return route.path
 })
 
-const keepAliveViews = ['Courses', 'Scores', 'Discussion', 'Users', 'AdminDashboard']
+const keepAliveViews = ['Courses', 'Scores', 'Discussion', 'Users', 'AdminDashboard', 'QuestionBank']
 
 const pageTitleMap = {
   '/admin': '后台首页',
   '/users': '用户管理',
   '/courses': '课程管理',
   '/discussion': '讨论管理',
+  '/question-bank': '题库管理',
   '/profile': '个人设置'
 }
 

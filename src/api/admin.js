@@ -26,5 +26,14 @@ export const adminApi = {
   setStatus(id, status) {
     // status: 1=启用, 0=禁用
     return request.put(`/admin/setStatus/${id}/${status}`)
+  },
+
+  // 兼容旧命名
+  getUsersByUsername(nickname) {
+    return request.get('/admin/getByNickName', { params: { nickname } })
+  },
+
+  deleteUser(id) {
+    return request.delete(`/admin/delById/${id}`)
   }
 }

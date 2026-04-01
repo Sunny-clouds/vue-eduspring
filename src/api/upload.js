@@ -93,5 +93,10 @@ export const uploadApi = {
         }
       }
     })
+  },
+
+  // 兼容旧命名
+  uploadFile(file, type) {
+    return this.upload(file, type)
   }
 }

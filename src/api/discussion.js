@@ -192,6 +192,11 @@ export const discussionApi = {
     return request.delete(`/discussion/del/${id}`)
   },
 
+  // 兼容旧命名
+  addDiscussion(data) {
+    return request.post('/discussion/save', data)
+  },
+
   // 添加帖子（后端接口）
   save(data) {
     return request.post('/discussion/save', data)
@@ -227,6 +232,11 @@ export const discussionApi = {
 
   // 删除评论
   deleteComment(id) {
+    return request.delete(`/discussion/delComment/${id}`)
+  },
+
+  // 兼容旧命名
+  deleteReply(id) {
     return request.delete(`/discussion/delComment/${id}`)
   },
 

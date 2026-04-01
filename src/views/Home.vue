@@ -31,6 +31,14 @@
         </div>
       </el-card>
 
+      <el-card v-if="isTeacher" class="nav-card" @click="goTo('/question-bank')">
+        <div class="card-content">
+          <i class="icon">🧠</i>
+          <h3>教师题库</h3>
+          <p>管理课程题目</p>
+        </div>
+      </el-card>
+
       <el-card class="nav-card" @click="goTo('/profile')">
         <div class="card-content">
           <i class="icon">👤</i>
@@ -66,9 +74,11 @@
 <script setup name="HomePage">
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { computed } from 'vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const isTeacher = computed(() => userStore.isTeacher)
 
 // 导航到指定页面
 const goTo = (path) => {

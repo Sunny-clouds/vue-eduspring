@@ -11,6 +11,10 @@ const CourseLearn = () => import('@/views/CourseLearn.vue')
 const Scores = () => import('@/views/Scores.vue')
 const Discussion = () => import('@/views/Discussion.vue')
 const DiscussionDetail = () => import('@/views/DiscussionDetail.vue')
+const ActivityDiscussionDetail = () => import('@/views/ActivityDiscussionDetail.vue')
+const ExamActivityInfo = () => import('@/views/ExamActivityInfo.vue')
+const ExamTaking = () => import('@/views/ExamTaking.vue')
+const QuestionBank = () => import('@/views/QuestionBank.vue')
 const Profile = () => import('@/views/Profile.vue')
 const Users = () => import('@/views/Users.vue')
 
@@ -67,6 +71,30 @@ const routes = [
     path: '/discussion/:id',
     name: 'DiscussionDetail',
     component: DiscussionDetail,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/activity/:id/discussion',
+    name: 'ActivityDiscussionDetail',
+    component: ActivityDiscussionDetail,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/activity/:id/exam-info',
+    name: 'ExamActivityInfo',
+    component: ExamActivityInfo,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/activity/:id/exam',
+    name: 'ExamTaking',
+    component: ExamTaking,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/question-bank',
+    name: 'QuestionBank',
+    component: QuestionBank,
     meta: { requiresAuth: true }
   },
   {

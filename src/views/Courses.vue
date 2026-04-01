@@ -44,18 +44,6 @@
                 <el-button type="danger" size="small" @click.stop="handleDeleteCourse(scope.row.backendId)">删除</el-button>
               </template>
             </el-table-column>
-            <el-table-column v-if="isStudent" label="操作" width="120" align="center" fixed="right">
-              <template #default="scope">
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click.stop="handleSelectCourse(scope.row.backendId)"
-                  :loading="selectingCourse === scope.row.backendId"
-                >
-                  选课
-                </el-button>
-              </template>
-            </el-table-column>
           </el-table>
 
           <!-- 分页 -->
@@ -178,6 +166,7 @@
               placeholder="请选择讲师"
               filterable
               clearable
+              :disabled="isTeacher"
               :loading="loadingTeacherOptions"
               style="width: 100%"
             >
@@ -217,6 +206,7 @@ const router = useRouter()
 const isStudent = computed(() => userStore.isStudent)
 const isAdmin = computed(() => userStore.isAdmin)
 const canManageCourses = computed(() => userStore.isTeacher || userStore.isAdmin)
+const isTeacher = computed(() => userStore.isTeacher)
 const activeTab = ref('all')
 const allCourses = ref([])
 const myCourses = ref([])
@@ -250,8 +240,6 @@ const allSelectionsDisplay = computed(() => {
 const allCoursesLoading = ref(false)
 const myCoursesLoading = ref(false)
 const allSelectionsLoading = ref(false)
-const myCoursesLoaded = ref(false)
-const selectingCourse = ref(null)
 const droppingCourse = ref(null)
 
 const allCoursesPage = ref(1)
@@ -273,6 +261,11 @@ const courseForm = ref({
   description: '',
   teacherId: null,
   teacherName: ''
+})
+
+const currentTeacherId = computed(() => {
+  const id = Number(userStore.user?.id)
+  return Number.isFinite(id) ? id : null
 })
 
 const normalizeSelectionRow = (item = {}) => {
@@ -307,31 +300,9 @@ const formatCourseStatus = (status) => {
 }
 
 const resolveCourseId = (course = {}) => {
-  const id = Number(course.courseId)
+  const id = Number(course.courseId ?? course.id)
   return Number.isFinite(id) ? id : null
 }
-
-const selectedCourseIdSet = computed(() => {
-  const set = new Set()
-  myCourses.value.forEach((item) => {
-    const id = resolveCourseId(item)
-    if (id !== null) {
-      set.add(id)
-    }
-  })
-  return set
-})
-
-const selectedCourseTitleSet = computed(() => {
-  const set = new Set()
-  myCourses.value.forEach((item = {}) => {
-    const title = String(item.title || item.courseTitle || item.courseName || '').trim()
-    if (title) {
-      set.add(title)
-    }
-  })
-  return set
-})
 
 const normalizeTeacherOptions = (data) => {
   // teacherList 接口在不同环境返回结构不一致，这里统一成 { id, label }。
@@ -371,6 +342,88 @@ const buildTeacherOptionsFromCourses = () => {
     .filter(item => Number.isFinite(item.id) && !!item.label)
 }
 
+const normalizeCourseRows = (data) => {
+  if (Array.isArray(data?.rows)) {
+    return data.rows
+  }
+  if (Array.isArray(data?.list)) {
+    return data.list
+  }
+  if (Array.isArray(data)) {
+    return data
+  }
+  return []
+}
+
+const filterTeacherCoursesByTitle = (rows, keyword) => {
+  const normalizedKeyword = String(keyword || '').trim().toLowerCase()
+  if (!normalizedKeyword) {
+    return rows
+  }
+  return rows.filter((item = {}) => String(item.title || '').toLowerCase().includes(normalizedKeyword))
+}
+
+const paginateRows = (rows, pageNum, currentPageSize) => {
+  const start = Math.max(0, (Number(pageNum) - 1) * Number(currentPageSize))
+  const end = start + Number(currentPageSize)
+  return rows.slice(start, end)
+}
+
+const loadTeacherCourses = async () => {
+  if (!isTeacher.value) {
+    return null
+  }
+
+  const teacherId = currentTeacherId.value
+  if (!Number.isFinite(teacherId)) {
+    ElMessage.warning('未获取到当前老师ID，请重新登录')
+    return {
+      rows: [],
+      total: 0
+    }
+  }
+
+  const response = await courseApi.getByTeaId(teacherId)
+  if (response?.code !== 1) {
+    throw new Error(response?.msg || '获取教师课程失败')
+  }
+
+  const allTeacherRows = normalizeCourseRows(response.data)
+  const filteredRows = filterTeacherCoursesByTitle(allTeacherRows, courseTitleKeyword.value)
+  return {
+    rows: paginateRows(filteredRows, allCoursesPage.value, pageSize.value),
+    total: filteredRows.length
+  }
+}
+
+const resolveCourseTeacherId = (course = {}) => {
+  const teacherId = Number(course.teacherId ?? course.teaId ?? course.teacher_id ?? course.userId)
+  return Number.isFinite(teacherId) ? teacherId : null
+}
+
+const ensureTeacherOwnsCourse = (course = {}) => {
+  if (!isTeacher.value) {
+    return true
+  }
+
+  const teacherId = currentTeacherId.value
+  const courseTeacherId = resolveCourseTeacherId(course)
+  if (!Number.isFinite(teacherId)) {
+    return false
+  }
+
+  if (Number.isFinite(courseTeacherId)) {
+    return teacherId === courseTeacherId
+  }
+
+  // 当行数据不带 teacherId 时，回退到当前教师课程列表中的课程ID校验。
+  const courseId = resolveCourseId(course)
+  if (!Number.isFinite(courseId)) {
+    return false
+  }
+  return allCourses.value.some((item = {}) => Number(item.id) === courseId)
+}
+
 const loadTeacherOptions = async () => {
   if (loadingTeacherOptions.value) {
     return
@@ -401,20 +454,26 @@ const loadAllCourses = async () => {
   allCoursesLoading.value = true
   try {
     const keyword = courseTitleKeyword.value.trim()
-    const response = keyword
-      ? await courseApi.getByTitle(keyword, allCoursesPage.value, pageSize.value)
-      : await courseApi.getAll(allCoursesPage.value, pageSize.value)
-
-    if (response.code === 1) {
-      const { rows, total } = normalizeTableData(response.data)
-      allCourses.value = rows
-      allCoursesTotal.value = total
-
-      if (keyword && rows.length === 0 && allCoursesPage.value === 1) {
-        ElMessage.warning('未查询到该课程')
-      }
+    if (isTeacher.value) {
+      const teacherResult = await loadTeacherCourses()
+      allCourses.value = teacherResult?.rows || []
+      allCoursesTotal.value = Number(teacherResult?.total || 0)
     } else {
-      ElMessage.error(response.msg || (keyword ? '搜索课程失败' : '获取课程列表失败'))
+      const response = keyword
+        ? await courseApi.getByTitle(keyword, allCoursesPage.value, pageSize.value)
+        : await courseApi.getAll(allCoursesPage.value, pageSize.value)
+
+      if (response.code === 1) {
+        const { rows, total } = normalizeTableData(response.data)
+        allCourses.value = rows
+        allCoursesTotal.value = total
+      } else {
+        ElMessage.error(response.msg || (keyword ? '搜索课程失败' : '获取课程列表失败'))
+      }
+    }
+
+    if (keyword && allCourses.value.length === 0 && allCoursesPage.value === 1) {
+      ElMessage.warning('未查询到该课程')
     }
   } catch (error) {
     ElMessage.error(error.message || (courseTitleKeyword.value.trim() ? '搜索课程出错' : '获取课程列表出错'))
@@ -454,7 +513,6 @@ const loadMyCourses = async () => {
           : `${item.progress}%`
       }))
       myCoursesTotal.value = total || rows.length
-      myCoursesLoaded.value = true
     } else {
       ElMessage.error(response.msg || '获取选课列表失败')
     }
@@ -550,22 +608,37 @@ const handleTabClick = (tabPane) => {
 }
 
 const resetCourseForm = () => {
+  const nickname = userStore.user?.nickname || userStore.user?.username || ''
+  const teacherId = currentTeacherId.value
   courseForm.value = {
     title: '',
     description: '',
-    teacherId: null,
-    teacherName: userStore.user?.nickname || userStore.user?.username || ''
+    teacherId: isTeacher.value && Number.isFinite(teacherId) ? teacherId : null,
+    teacherName: nickname
   }
 }
 
 const openCreateDialog = async () => {
   editingCourseId.value = null
-  await loadTeacherOptions()
+  if (isTeacher.value) {
+    const teacherId = currentTeacherId.value
+    const teacherLabel = String(userStore.user?.nickname || userStore.user?.username || '').trim()
+    teacherOptions.value = Number.isFinite(teacherId) && teacherLabel
+      ? [{ id: teacherId, label: teacherLabel }]
+      : []
+  } else {
+    await loadTeacherOptions()
+  }
   resetCourseForm()
   courseDialogVisible.value = true
 }
 
 const openEditDialog = async (course) => {
+  if (!ensureTeacherOwnsCourse(course)) {
+    ElMessage.warning('只能编辑自己负责的课程')
+    return
+  }
+
   editingCourseId.value = course.backendId || course.id
   await loadTeacherOptions()
   const teacherName = course.teacherName || course.teacher || ''
@@ -601,11 +674,23 @@ const handleSaveCourse = async () => {
   savingCourse.value = true
   try {
     const selectedTeacher = teacherOptions.value.find(item => item.id === Number(courseForm.value.teacherId))
-    const teacherName = selectedTeacher?.label || courseForm.value.teacherName?.trim() || ''
+    const currentTeacherLabel = String(userStore.user?.nickname || userStore.user?.username || '').trim()
+    const finalTeacherId = isTeacher.value
+      ? currentTeacherId.value
+      : Number(courseForm.value.teacherId)
+    const teacherName = isTeacher.value
+      ? currentTeacherLabel
+      : (selectedTeacher?.label || courseForm.value.teacherName?.trim() || '')
+
+    if (!Number.isFinite(Number(finalTeacherId))) {
+      ElMessage.warning('讲师信息无效，请重新登录后重试')
+      return
+    }
+
     const payload = {
       ...courseForm.value,
       title,
-      teacherId: Number(courseForm.value.teacherId),
+      teacherId: Number(finalTeacherId),
       teacherName
     }
 
@@ -639,6 +724,12 @@ const handleDeleteCourse = async (id) => {
     return
   }
 
+  const targetCourse = allCourses.value.find(item => Number(item.id) === Number(id))
+  if (isTeacher.value && !ensureTeacherOwnsCourse(targetCourse)) {
+    ElMessage.warning('只能删除自己负责的课程')
+    return
+  }
+
   try {
     await ElMessageBox.confirm('删除后不可恢复，确认删除该课程吗？', '删除确认', {
       type: 'warning',
@@ -658,35 +749,6 @@ const handleDeleteCourse = async (id) => {
       return
     }
     ElMessage.error(error.message || '课程删除出错')
-  }
-}
-
-// 选课
-const handleSelectCourse = async (courseId) => {
-  if (!isStudent.value) {
-    ElMessage.warning('管理员或教师账号不支持选课操作')
-    return
-  }
-
-  selectingCourse.value = courseId
-  try {
-    const studentId = userStore.user?.id
-    if (!studentId) {
-      ElMessage.error('获取用户信息失败，请重新登录')
-      return
-    }
-    const response = await courseApi.selectCourse(studentId, courseId)
-    if (response.code === 1) {
-      ElMessage.success('选课成功')
-      loadAllCourses()
-      loadMyCourses()
-    } else {
-      ElMessage.error(response.msg || '选课失败')
-    }
-  } catch (error) {
-    ElMessage.error(error.message || '选课出错')
-  } finally {
-    selectingCourse.value = null
   }
 }
 
@@ -714,39 +776,15 @@ const handleDropCourse = async (courseId) => {
   }
 }
 
-const ensureStudentCanEnterCourse = async (course) => {
-  if (!isStudent.value) {
-    return true
-  }
-
-  if (!myCoursesLoaded.value) {
-    await loadMyCourses()
-  }
-
-  const courseId = resolveCourseId(course)
-  const courseTitle = String(course?.title || course?.courseTitle || '').trim()
-
-  if (courseId !== null && selectedCourseIdSet.value.has(courseId)) {
-    return true
-  }
-
-  if (courseTitle && selectedCourseTitleSet.value.has(courseTitle)) {
-    return true
-  }
-
-  ElMessage.warning('仅可进入已选课课程学习')
-  return false
-}
-
 const enterCourseLearning = async (course) => {
-  const courseId = resolveCourseId(course)
-  if (courseId === null) {
-    ElMessage.warning('课程ID无效，无法进入学习页')
+  if (isTeacher.value && !ensureTeacherOwnsCourse(course)) {
+    ElMessage.warning('只能查看自己负责的课程')
     return
   }
 
-  const allowed = await ensureStudentCanEnterCourse(course)
-  if (!allowed) {
+  const courseId = resolveCourseId(course)
+  if (courseId === null) {
+    ElMessage.warning('课程ID无效，无法进入学习页')
     return
   }
 
