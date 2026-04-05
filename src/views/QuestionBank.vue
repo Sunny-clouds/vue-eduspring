@@ -215,8 +215,7 @@ const form = ref(buildDefaultForm())
 const typeTextMap = {
   1: '单选',
   2: '多选',
-  3: '判断',
-  4: '简答'
+  3: '判断'
 }
 
 const difficultyTextMap = {
@@ -228,8 +227,7 @@ const difficultyTextMap = {
 const typeFormOptions = [
   { value: 1, label: '单选' },
   { value: 2, label: '多选' },
-  { value: 3, label: '判断' },
-  { value: 4, label: '简答' }
+  { value: 3, label: '判断' }
 ]
 
 const difficultyFormOptions = [

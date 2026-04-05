@@ -265,7 +265,7 @@
             <template #default="scope">
               <div class="activity-title-cell">
                 <span>{{ scope.row.title || '-' }}</span>
-                <el-tag :type="scope.row.ended ? 'info' : 'success'" size="small" effect="light">
+                <el-tag :type="scope.row.progressTagType" size="small" effect="light">
                   {{ scope.row.activityProgressText }}
                 </el-tag>
                 <el-tag
@@ -369,6 +369,64 @@
               placeholder="请输入活动分数"
             />
           </el-form-item>
+          <template v-if="Number(activityForm.type) === 2">
+            <el-form-item label="考试时长" required>
+              <el-select
+                v-model="activityForm.examDurationText"
+                placeholder="请选择考试时长"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="item in examDurationTextOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="允许重考" required>
+              <el-select
+                v-model="activityForm.allowRetakeText"
+                placeholder="请选择是否允许重考"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="item in allowRetakeTextOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="最大次数" required>
+              <el-select
+                v-model="activityForm.maxAttemptsText"
+                placeholder="请选择最大考试次数"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="item in maxAttemptsTextOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="立即出分" required>
+              <el-select
+                v-model="activityForm.showResultsText"
+                placeholder="请选择是否立即显示成绩"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="item in showResultsTextOptions"
+                  :key="item"
+                  :label="item"
+                  :value="item"
+                />
+              </el-select>
+            </el-form-item>
+          </template>
           <el-form-item label="活动时间" required class="activity-time-form-item">
             <div class="activity-time-range">
               <div class="activity-time-block">
@@ -543,6 +601,8 @@ import { courseApi } from '@/api/course'
 import { uploadApi } from '@/api/upload'
 import { studentCourseApi } from '@/api/studentCourse'
 import { activityApi } from '@/api/activity'
+import { testPaperApi } from '@/api/testPaper'
+import { examApi } from '@/api/exam'
 import ActivityDiscussionDetail from '@/views/ActivityDiscussionDetail.vue'
 
 const route = useRoute()
@@ -598,6 +658,10 @@ const activityForm = ref({
   title: '',
   type: '',
   score: '',
+  examDurationText: '60分钟',
+  allowRetakeText: '否',
+  maxAttemptsText: '1次',
+  showResultsText: '是',
   startTime: '',
   endTime: ''
 })
@@ -647,21 +711,29 @@ const displayedActivities = computed(() => {
   return activities.value.map((item = {}) => {
     const typeNumber = Number(item.type ?? item.activityType ?? item.activity_type)
     const typeText = activityTypeOptions.find(option => option.value === typeNumber)?.label || '-'
+    const startTimeRaw = String(item.startTime || item.start_time || '').trim()
+    const normalizedStartTime = startTimeRaw && !startTimeRaw.includes('T') ? startTimeRaw.replace(' ', 'T') : startTimeRaw
+    const startTimestamp = new Date(normalizedStartTime).getTime()
+    const notStarted = Number.isFinite(startTimestamp) ? Date.now() < startTimestamp : false
     const endTimeRaw = String(item.endTime || item.end_time || '').trim()
     const normalizedEndTime = endTimeRaw && !endTimeRaw.includes('T') ? endTimeRaw.replace(' ', 'T') : endTimeRaw
     const endTimestamp = new Date(normalizedEndTime).getTime()
     const remainingMs = Number.isFinite(endTimestamp) ? endTimestamp - Date.now() : NaN
     const ended = Number.isFinite(endTimestamp) ? Date.now() > endTimestamp : false
     const endingSoon = Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs <= 24 * 60 * 60 * 1000
+    const activityProgressText = notStarted ? '未开始' : (ended ? '已结束' : '进行中')
+    const progressTagType = notStarted ? 'warning' : (ended ? 'info' : 'success')
     return {
     ...item,
     backendId: item.id,
     username: item.username || item.nickname || item.userName || item.creatorName || '匿名用户',
     startTime: item.startTime || item.start_time || item.createTime || '-',
     endTime: item.endTime || item.end_time || '-',
+    notStarted,
     ended,
     endingSoon,
-    activityProgressText: ended ? '已结束' : '正在进行',
+    activityProgressText,
+    progressTagType,
     showStudentUrgentTip: isStudent.value && endingSoon,
     urgentTipText: '不足1天，及时参加',
     typeText,
@@ -980,10 +1052,139 @@ const openActivityDialog = () => {
     title: '',
     type: '',
     score: '',
+    examDurationText: examCreateDefaultsText.duration,
+    allowRetakeText: examCreateDefaultsText.allowRetake,
+    maxAttemptsText: examCreateDefaultsText.maxAttempts,
+    showResultsText: examCreateDefaultsText.showResults,
     startTime: '',
     endTime: ''
   }
   showActivityDialog.value = true
+}
+
+const extractCreatedId = (responseData) => {
+  const candidates = [
+    responseData,
+    responseData?.id,
+    responseData?.activityId,
+    responseData?.testPaperId,
+    responseData?.paperId,
+    responseData?.examId,
+    responseData?.data?.id,
+    responseData?.data?.activityId,
+    responseData?.data?.testPaperId,
+    responseData?.data?.paperId,
+    responseData?.data?.examId
+  ]
+
+  for (const value of candidates) {
+    const id = Number(value)
+    if (Number.isFinite(id) && id > 0) {
+      return id
+    }
+  }
+  return null
+}
+
+const resolveCreatedActivityId = async ({ directData, courseId, title, startTime, endTime }) => {
+  const directId = extractCreatedId(directData)
+  if (Number.isFinite(directId)) {
+    return directId
+  }
+
+  const listResponse = await activityApi.getAllByCourseId(courseId)
+  if (listResponse?.code !== 1) {
+    return null
+  }
+
+  const rows = normalizeActivityRows(listResponse.data)
+  const matched = rows
+    .filter((item = {}) => {
+      const itemTitle = String(item.title || item.activityName || item.name || '').trim()
+      const itemStart = String(item.startTime || item.start_time || '').trim()
+      const itemEnd = String(item.endTime || item.end_time || '').trim()
+      return itemTitle === title && itemStart === startTime && itemEnd === endTime
+    })
+    .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+
+  const fallbackId = Number(matched[0]?.id || 0)
+  return Number.isFinite(fallbackId) && fallbackId > 0 ? fallbackId : null
+}
+
+const examFieldTextNumberMap = {
+  duration: {
+    '30分钟': 30,
+    '60分钟': 60,
+    '90分钟': 90,
+    '120分钟': 120
+  },
+  allowRetake: {
+    '否': 0,
+    '是': 1
+  },
+  maxAttempts: {
+    '1次': 1,
+    '2次': 2,
+    '3次': 3
+  },
+  showResults: {
+    '否': 0,
+    '是': 1
+  }
+}
+
+const examCreateDefaultsText = {
+  duration: '60分钟',
+  allowRetake: '否',
+  maxAttempts: '1次',
+  showResults: '是'
+}
+const examDurationTextOptions = Object.keys(examFieldTextNumberMap.duration)
+const allowRetakeTextOptions = Object.keys(examFieldTextNumberMap.allowRetake)
+const maxAttemptsTextOptions = Object.keys(examFieldTextNumberMap.maxAttempts)
+const showResultsTextOptions = Object.keys(examFieldTextNumberMap.showResults)
+
+const createExamAfterActivity = async ({
+  activityId,
+  courseId,
+  title,
+  score,
+  userId,
+  examConfig
+}) => {
+  const testPaperPayload = {
+    id: null,
+    title,
+    courseId,
+    totalScore: score,
+    createUser: userId
+  }
+
+  const paperResponse = await testPaperApi.saveTestPaper(testPaperPayload)
+  if (paperResponse?.code !== 1) {
+    throw new Error(paperResponse?.msg || '创建试卷失败')
+  }
+
+  const testPaperId = extractCreatedId(paperResponse?.data ?? paperResponse)
+  if (!Number.isFinite(testPaperId)) {
+    throw new Error('创建试卷成功但未返回试卷ID')
+  }
+
+  const examPayload = {
+    id: null,
+    activityId,
+    paperId: testPaperId,
+    duration: examFieldTextNumberMap.duration[examConfig.durationText],
+    totalScore: score,
+    allowRetake: examFieldTextNumberMap.allowRetake[examConfig.allowRetakeText],
+    maxAttempt: examFieldTextNumberMap.maxAttempts[examConfig.maxAttemptsText],
+    showResult: examFieldTextNumberMap.showResults[examConfig.showResultsText]
+  }
+
+  const examResponse = await examApi.saveExam(examPayload)
+  if (examResponse?.code !== 1) {
+    throw new Error(examResponse?.msg || '创建考试信息失败')
+  }
 }
 
 const handleCreateActivity = async () => {
@@ -997,6 +1198,10 @@ const handleCreateActivity = async () => {
   const score = Number(activityForm.value.score)
   const startTime = String(activityForm.value.startTime || '').trim()
   const endTime = String(activityForm.value.endTime || '').trim()
+  const examDurationText = String(activityForm.value.examDurationText || '').trim()
+  const allowRetakeText = String(activityForm.value.allowRetakeText || '').trim()
+  const maxAttemptsText = String(activityForm.value.maxAttemptsText || '').trim()
+  const showResultsText = String(activityForm.value.showResultsText || '').trim()
   const userId = Number(userStore.user?.id)
 
   if (!title) {
@@ -1027,6 +1232,24 @@ const handleCreateActivity = async () => {
     ElMessage.warning('未获取到当前用户信息，请重新登录')
     return
   }
+  if (type === 2) {
+    if (!examFieldTextNumberMap.duration[examDurationText]) {
+      ElMessage.warning('请选择考试时长')
+      return
+    }
+    if (examFieldTextNumberMap.allowRetake[allowRetakeText] === undefined) {
+      ElMessage.warning('请选择是否允许重考')
+      return
+    }
+    if (!examFieldTextNumberMap.maxAttempts[maxAttemptsText]) {
+      ElMessage.warning('请选择最大考试次数')
+      return
+    }
+    if (examFieldTextNumberMap.showResults[showResultsText] === undefined) {
+      ElMessage.warning('请选择是否立即显示成绩')
+      return
+    }
+  }
 
   creatingActivity.value = true
   try {
@@ -1040,6 +1263,33 @@ const handleCreateActivity = async () => {
       endTime
     })
     if (response?.code === 1) {
+      const createdActivityId = type === 2
+        ? await resolveCreatedActivityId({
+          directData: response?.data,
+          courseId: currentCourseId,
+          title,
+          startTime,
+          endTime
+        })
+        : null
+
+      if (type === 2 && Number.isFinite(createdActivityId)) {
+        await createExamAfterActivity({
+          activityId: createdActivityId,
+          courseId: currentCourseId,
+          title,
+          score,
+          userId,
+          examConfig: {
+            durationText: examDurationText,
+            allowRetakeText,
+            maxAttemptsText,
+            showResultsText
+          }
+        })
+      } else if (type === 2) {
+        ElMessage.warning('考试活动已发布，但未获取到活动ID，未能自动创建试卷与考试信息')
+      }
       ElMessage.success(response?.msg || '活动发布成功')
       showActivityDialog.value = false
       await loadActivities()
@@ -1223,6 +1473,12 @@ const goActivityComments = async (row) => {
   }
 
   const activityType = Number(row.type || row.activityType || row.activity_type || 0)
+  const canEnterNotStartedExam = activityType === 2 && canPublishActivity.value
+  if (row?.notStarted && !canEnterNotStartedExam) {
+    ElMessage.warning('活动还未开始')
+    return
+  }
+
   if (activityType === 2) {
     router.push({
       name: 'ExamActivityInfo',
@@ -1230,7 +1486,8 @@ const goActivityComments = async (row) => {
       query: {
         courseId: String(courseId.value || ''),
         courseTitle: courseTitle.value || '',
-        teacherName: teacherName.value || ''
+        teacherName: teacherName.value || '',
+        startTime: String(row.startTime || row.start_time || '')
       }
     })
     return

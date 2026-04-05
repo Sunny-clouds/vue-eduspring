@@ -65,15 +65,16 @@
           placeholder="写下你的回复..."
           maxlength="500"
           show-word-limit
-          :disabled="postingComment || isActivityEnded"
+          :disabled="postingComment || isActivityEnded || isActivityNotStarted"
         />
         <div class="reply-form-actions">
+          <span v-if="isActivityNotStarted" class="reply-disabled-tip">活动还未开始，暂不可回复</span>
           <span v-if="isActivityEnded" class="reply-disabled-tip">活动已结束，当前不可回复</span>
           <el-button
             type="primary"
             @click="handleSubmitComment"
             :loading="postingComment"
-            :disabled="isActivityEnded"
+            :disabled="isActivityEnded || isActivityNotStarted"
           >
             发送回复
           </el-button>
@@ -135,6 +136,15 @@ const isActivityEnded = computed(() => {
   const normalized = endTime.includes('T') ? endTime : endTime.replace(' ', 'T')
   const endTimestamp = new Date(normalized).getTime()
   return Number.isFinite(endTimestamp) ? Date.now() > endTimestamp : false
+})
+const isActivityNotStarted = computed(() => {
+  const startTime = String(activityData.value?.startTime || '').trim()
+  if (!startTime) {
+    return false
+  }
+  const normalized = startTime.includes('T') ? startTime : startTime.replace(' ', 'T')
+  const startTimestamp = new Date(normalized).getTime()
+  return Number.isFinite(startTimestamp) ? Date.now() < startTimestamp : false
 })
 
 const TYPE_MAP = { 1: '作业', 2: '考试', 3: '讨论', 4: '签到' }
@@ -275,6 +285,13 @@ const loadComments = async () => {
     return
   }
 
+  if (isActivityNotStarted.value) {
+    commentsList.value = []
+    currentPage.value = 1
+    ElMessage.warning('活动还未开始')
+    return
+  }
+
   commentsLoading.value = true
   try {
     const response = await activityApi.getCommentById(activityId.value)
@@ -299,6 +316,11 @@ const loadComments = async () => {
 }
 
 const handleSubmitComment = async () => {
+  if (isActivityNotStarted.value) {
+    ElMessage.warning('活动还未开始，不能回复')
+    return
+  }
+
   if (isActivityEnded.value) {
     ElMessage.warning('活动已结束，不能继续回复')
     return

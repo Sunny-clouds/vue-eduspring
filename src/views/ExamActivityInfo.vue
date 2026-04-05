@@ -40,8 +40,53 @@
       </div>
 
       <div class="actions">
+        <el-button
+          v-if="canEditExamConfig"
+          plain
+          :disabled="!isExamNotStarted || updating"
+          @click="openEditDialog"
+        >
+          修改考试信息
+        </el-button>
         <el-button type="primary" size="large" @click="startExam">开始考试</el-button>
       </div>
+
+      <el-dialog
+        v-model="editDialogVisible"
+        title="修改考试信息"
+        width="520px"
+        :close-on-click-modal="false"
+      >
+        <el-form label-width="120px" @submit.prevent="handleUpdateExam">
+          <el-form-item label="考试时长" required>
+            <el-select v-model="editForm.durationText" style="width: 100%" placeholder="请选择考试时长">
+              <el-option v-for="item in durationTextOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="考试总分" required>
+            <el-input v-model="editForm.totalScore" placeholder="请输入考试总分" />
+          </el-form-item>
+          <el-form-item label="允许重考" required>
+            <el-select v-model="editForm.allowRetakeText" style="width: 100%" placeholder="请选择是否允许重考">
+              <el-option v-for="item in yesNoOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="最大考试次数" required>
+            <el-select v-model="editForm.maxAttemptText" style="width: 100%" placeholder="请选择最大考试次数">
+              <el-option v-for="item in maxAttemptTextOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="立即显示成绩" required>
+            <el-select v-model="editForm.showResultText" style="width: 100%" placeholder="请选择是否立即显示成绩">
+              <el-option v-for="item in yesNoOptions" :key="item" :label="item" :value="item" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="editDialogVisible = false" :disabled="updating">取消</el-button>
+          <el-button type="primary" :loading="updating" @click="handleUpdateExam">保存</el-button>
+        </template>
+      </el-dialog>
     </el-card>
   </div>
 </template>
@@ -51,22 +96,67 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { examApi } from '@/api/exam'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const loading = ref(false)
+const updating = ref(false)
+const editDialogVisible = ref(false)
 const examDetailRaw = ref({})
+const editForm = ref({
+  durationText: '60分钟',
+  totalScore: '',
+  allowRetakeText: '否',
+  maxAttemptText: '1次',
+  showResultText: '是'
+})
 
 const activityId = computed(() => Number(route.params.id))
+const canEditExamConfig = computed(() => userStore.isAdmin || userStore.isTeacher)
+
+const mapDurationTextToNumber = {
+  '30分钟': 30,
+  '60分钟': 60,
+  '90分钟': 90,
+  '120分钟': 120
+}
+const mapAllowRetakeTextToNumber = { '否': 0, '是': 1 }
+const mapMaxAttemptTextToNumber = { '1次': 1, '2次': 2, '3次': 3 }
+const mapShowResultTextToNumber = { '否': 0, '是': 1 }
+const durationTextOptions = Object.keys(mapDurationTextToNumber)
+const yesNoOptions = ['否', '是']
+const maxAttemptTextOptions = Object.keys(mapMaxAttemptTextToNumber)
+
+const parseDateTime = (value = '') => {
+  const text = String(value || '').trim()
+  if (!text) {
+    return null
+  }
+  const normalized = text.includes('T') ? text : text.replace(' ', 'T')
+  const ms = new Date(normalized).getTime()
+  return Number.isFinite(ms) ? ms : null
+}
+
+const isExamNotStarted = computed(() => {
+  const fromRoute = parseDateTime(route.query.startTime)
+  const fromDetail = parseDateTime(examDetailRaw.value?.startTime)
+  const startMs = fromRoute ?? fromDetail
+  if (!Number.isFinite(startMs)) {
+    return false
+  }
+  return Date.now() < startMs
+})
 
 const examDetail = computed(() => {
   const detail = examDetailRaw.value || {}
   const allowRetake = Number(detail.allowRetake)
-  const showResult = Number(detail.showResult)
+  const showResult = Number(detail.showResults ?? detail.showResult)
   const duration = Number(detail.duration)
   const totalScore = Number(detail.totalScore)
-  const maxAttempt = Number(detail.maxAttempt)
+  const maxAttempt = Number(detail.maxAttempts ?? detail.maxAttempt)
 
   return {
     title: detail.title || '-',
@@ -96,6 +186,98 @@ const loadExamInfo = async () => {
     ElMessage.error(error.message || '获取考试信息出错')
   } finally {
     loading.value = false
+  }
+}
+
+const openEditDialog = () => {
+  if (!canEditExamConfig.value) {
+    ElMessage.warning('仅教师或管理员可修改考试信息')
+    return
+  }
+  if (!isExamNotStarted.value) {
+    ElMessage.warning('考试已开始或已结束，无法修改考试信息')
+    return
+  }
+
+  const detail = examDetailRaw.value || {}
+  const duration = Number(detail.duration)
+  const allowRetake = Number(detail.allowRetake)
+  const maxAttempt = Number(detail.maxAttempt ?? detail.maxAttempts)
+  const showResult = Number(detail.showResult ?? detail.showResults)
+  const totalScore = Number(detail.totalScore)
+
+  editForm.value = {
+    durationText: durationTextOptions.find(item => mapDurationTextToNumber[item] === duration) || '60分钟',
+    totalScore: Number.isFinite(totalScore) ? String(totalScore) : '',
+    allowRetakeText: allowRetake === 1 ? '是' : '否',
+    maxAttemptText: maxAttemptTextOptions.find(item => mapMaxAttemptTextToNumber[item] === maxAttempt) || '1次',
+    showResultText: showResult === 1 ? '是' : '否'
+  }
+  editDialogVisible.value = true
+}
+
+const handleUpdateExam = async () => {
+  if (!canEditExamConfig.value) {
+    ElMessage.warning('仅教师或管理员可修改考试信息')
+    return
+  }
+  if (!isExamNotStarted.value) {
+    ElMessage.warning('考试已开始或已结束，无法修改考试信息')
+    return
+  }
+
+  const totalScore = Number(editForm.value.totalScore)
+  const duration = mapDurationTextToNumber[editForm.value.durationText]
+  const allowRetake = mapAllowRetakeTextToNumber[editForm.value.allowRetakeText]
+  const maxAttempt = mapMaxAttemptTextToNumber[editForm.value.maxAttemptText]
+  const showResult = mapShowResultTextToNumber[editForm.value.showResultText]
+  const currentExamId = Number(examDetailRaw.value?.id ?? examDetailRaw.value?.examId ?? 0)
+  const currentPaperId = Number(examDetailRaw.value?.paperId ?? examDetailRaw.value?.testPaperId ?? 0)
+
+  if (!Number.isFinite(duration)) {
+    ElMessage.warning('请选择考试时长')
+    return
+  }
+  if (!Number.isFinite(totalScore)) {
+    ElMessage.warning('请输入正确的考试总分')
+    return
+  }
+  if (!Number.isFinite(allowRetake) || !Number.isFinite(maxAttempt) || !Number.isFinite(showResult)) {
+    ElMessage.warning('考试配置不完整')
+    return
+  }
+  if (!Number.isFinite(currentExamId) || currentExamId <= 0) {
+    ElMessage.warning('未获取到考试ID，无法修改考试信息')
+    return
+  }
+  if (!Number.isFinite(currentPaperId) || currentPaperId <= 0) {
+    ElMessage.warning('未获取到试卷ID，无法修改考试信息')
+    return
+  }
+
+  updating.value = true
+  try {
+    const response = await examApi.updateExam({
+      id: currentExamId,
+      activityId: activityId.value,
+      paperId: currentPaperId,
+      duration,
+      totalScore,
+      allowRetake,
+      maxAttempt,
+      showResult
+    })
+    if (response?.code === 1) {
+      ElMessage.success(response?.msg || '考试信息修改成功')
+      editDialogVisible.value = false
+      await loadExamInfo()
+    } else {
+      ElMessage.error(response?.msg || '考试信息修改失败')
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '考试信息修改出错')
+  } finally {
+    updating.value = false
   }
 }
 
