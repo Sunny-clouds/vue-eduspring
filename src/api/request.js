@@ -56,8 +56,14 @@ instance.interceptors.response.use(
       window.location.href = '/login'
     }
 
-    // 提供更详细的错误信息
-    const errorMessage = error.response?.data?.msg ||
+    const responseData = error.response?.data
+    const responseText = typeof responseData === 'string' ? responseData.trim() : ''
+    const responseObj = responseData && typeof responseData === 'object' ? responseData : {}
+    // 提供更详细的错误信息（兼容后端异常常见字段）。
+    const errorMessage = responseObj.msg ||
+          responseObj.message ||
+          responseObj.error ||
+          responseText ||
                         (status === 413 ? '上传文件过大，请联系管理员调整服务端上传大小限制' : '') ||
                         (status === 403 ? '当前账号无权访问该接口' : '') ||
                         error.message ||

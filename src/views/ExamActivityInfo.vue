@@ -94,8 +94,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { examApi } from '@/api/exam'
+import { testPaperApi } from '@/api/testPaper'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -115,6 +116,10 @@ const editForm = ref({
 })
 
 const activityId = computed(() => Number(route.params.id))
+const bizId = computed(() => {
+  const fromQuery = Number(route.query.bizId)
+  return Number.isFinite(fromQuery) && fromQuery > 0 ? fromQuery : null
+})
 const canEditExamConfig = computed(() => userStore.isAdmin || userStore.isTeacher)
 
 const mapDurationTextToNumber = {
@@ -129,6 +134,88 @@ const mapShowResultTextToNumber = { '否': 0, '是': 1 }
 const durationTextOptions = Object.keys(mapDurationTextToNumber)
 const yesNoOptions = ['否', '是']
 const maxAttemptTextOptions = Object.keys(mapMaxAttemptTextToNumber)
+
+const resolvePaperId = (detail = {}) => {
+  const candidates = [
+    detail.paperId,
+    detail.testPaperId,
+    detail.paper_id,
+    detail.test_paper_id
+  ]
+  for (const value of candidates) {
+    const id = Number(value)
+    if (Number.isFinite(id) && id > 0) {
+      return id
+    }
+  }
+  return null
+}
+
+const resolveSessionPayload = (activityIdValue) => {
+  const key = `exam-session-${activityIdValue}`
+  try {
+    const raw = sessionStorage.getItem(key)
+    const parsed = raw ? JSON.parse(raw) : null
+    return { key, data: parsed }
+  } catch (error) {
+    return { key, data: null }
+  }
+}
+
+const resolveStudentPaper = (paperData = {}) => {
+  if (!paperData || typeof paperData !== 'object') {
+    return null
+  }
+  const candidates = [
+    paperData.studentPaper,
+    paperData.studentPaperDto,
+    paperData.paperSession,
+    paperData.studentExamPaper
+  ]
+  for (const item of candidates) {
+    if (item && typeof item === 'object') {
+      return item
+    }
+  }
+  return null
+}
+
+const resolveUsedAttemptCount = (detail = {}) => {
+  const candidates = [
+    detail.usedAttempts,
+    detail.attemptCount,
+    detail.currentAttempt,
+    detail.studentAttempt,
+    detail.studentAttempts,
+    detail.attempt,
+    detail.submitCount,
+    detail.studentPaper?.attempt,
+    detail.studentPaperDto?.attempt
+  ]
+
+  for (const value of candidates) {
+    const count = Number(value)
+    if (Number.isFinite(count) && count >= 0) {
+      return count
+    }
+  }
+
+  return null
+}
+
+const hasReachedMaxAttemptByFrontend = (detail = {}) => {
+  const maxAttempt = Number(detail.maxAttempts ?? detail.maxAttempt)
+  if (!Number.isFinite(maxAttempt) || maxAttempt <= 0) {
+    return false
+  }
+
+  const usedAttempt = resolveUsedAttemptCount(detail)
+  if (!Number.isFinite(usedAttempt)) {
+    return false
+  }
+
+  return usedAttempt >= maxAttempt
+}
 
 const parseDateTime = (value = '') => {
   const text = String(value || '').trim()
@@ -169,14 +256,14 @@ const examDetail = computed(() => {
 })
 
 const loadExamInfo = async () => {
-  if (!Number.isFinite(activityId.value)) {
-    ElMessage.warning('活动ID无效')
+  if (!Number.isFinite(bizId.value)) {
+    ElMessage.warning('考试ID无效')
     return
   }
 
   loading.value = true
   try {
-    const response = await examApi.getExamByActivityId(activityId.value)
+    const response = await examApi.getExamByBizId(bizId.value)
     if (response?.code === 1) {
       examDetailRaw.value = response.data || {}
       return
@@ -297,22 +384,137 @@ const goBack = () => {
   router.back()
 }
 
-const startExam = () => {
+const startExam = async () => {
   const aid = Number(activityId.value)
   if (!Number.isFinite(aid)) {
     ElMessage.warning('活动ID无效，无法开始考试')
     return
   }
 
-  router.push({
-    name: 'ExamTaking',
-    params: { id: aid },
-    query: {
-      courseId: route.query.courseId || '',
-      courseTitle: route.query.courseTitle || '',
-      teacherName: route.query.teacherName || ''
+  const paperId = resolvePaperId(examDetailRaw.value)
+  if (!Number.isFinite(paperId)) {
+    ElMessage.warning('未获取到试卷ID，无法开始考试')
+    return
+  }
+
+  const duration = Number(examDetailRaw.value?.duration)
+  if (!Number.isFinite(duration) || duration <= 0) {
+    ElMessage.warning('未获取到考试总时长，无法开始考试')
+    return
+  }
+
+  const existingSession = resolveSessionPayload(aid)
+  const existingStartAt = Number(existingSession?.data?.startAt)
+  const existingDuration = Number(existingSession?.data?.duration)
+  const existingPaperId = Number(existingSession?.data?.paperId)
+  const existingStudentPaperId = Number(
+    existingSession?.data?.studentPaperId
+    ?? existingSession?.data?.studentpaperId
+    ?? existingSession?.data?.studentPaper?.id
+  )
+  const existingSubmitStatus = String(existingSession?.data?.submitStatus || '').trim().toLowerCase()
+  const isSessionActive = Number.isFinite(existingStartAt)
+    && existingStartAt > 0
+    && Number.isFinite(existingDuration)
+    && existingDuration > 0
+    && (Date.now() < existingStartAt + existingDuration * 60 * 1000)
+    && existingSubmitStatus !== 'submitted'
+
+  if (isSessionActive && Number.isFinite(existingPaperId) && existingPaperId > 0) {
+    router.push({
+      name: 'ExamTaking',
+      params: { id: aid },
+      query: {
+        courseId: route.query.courseId || '',
+        courseTitle: route.query.courseTitle || '',
+        teacherName: route.query.teacherName || '',
+        bizId: String(bizId.value || ''),
+        paperId: String(existingPaperId),
+        studentPaperId: Number.isFinite(existingStudentPaperId) && existingStudentPaperId > 0
+          ? String(existingStudentPaperId)
+          : '',
+        duration: String(existingDuration),
+        startAt: String(existingStartAt),
+        sessionKey: existingSession.key
+      }
+    })
+    return
+  }
+
+  if (hasReachedMaxAttemptByFrontend(examDetailRaw.value)) {
+    ElMessage.warning('已达到本次考试最大尝试次数，无法继续作答')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `本次考试总时长为 ${duration} 分钟，确认开始考试吗？`,
+      '开始考试确认',
+      {
+        type: 'warning',
+        confirmButtonText: '确认开始',
+        cancelButtonText: '再看看'
+      }
+    )
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') {
+      return
     }
-  })
+    ElMessage.error(error.message || '确认开始考试失败')
+    return
+  }
+
+  loading.value = true
+  try {
+    const paperResponse = await testPaperApi.getTestPaperById(paperId)
+    if (paperResponse?.code !== 1) {
+      ElMessage.error('开始考试失败，请稍后重试')
+      return
+    }
+
+    const resolvedStudentPaper = resolveStudentPaper(paperResponse?.data || {})
+    const resolvedStudentPaperId = Number(
+      resolvedStudentPaper?.id
+      ?? paperResponse?.data?.studentPaperId
+      ?? paperResponse?.data?.studentpaperId
+    )
+
+    const startAt = Date.now()
+    const sessionKey = existingSession.key
+    sessionStorage.setItem(sessionKey, JSON.stringify({
+      activityId: aid,
+      paperId,
+      studentPaperId: Number.isFinite(resolvedStudentPaperId) && resolvedStudentPaperId > 0
+        ? resolvedStudentPaperId
+        : null,
+      studentPaper: resolvedStudentPaper || null,
+      duration,
+      startAt,
+      paperData: paperResponse?.data || {}
+    }))
+
+    router.push({
+      name: 'ExamTaking',
+      params: { id: aid },
+      query: {
+        courseId: route.query.courseId || '',
+        courseTitle: route.query.courseTitle || '',
+        teacherName: route.query.teacherName || '',
+        bizId: String(bizId.value || ''),
+        paperId: String(paperId),
+        studentPaperId: Number.isFinite(resolvedStudentPaperId) && resolvedStudentPaperId > 0
+          ? String(resolvedStudentPaperId)
+          : '',
+        duration: String(duration),
+        startAt: String(startAt),
+        sessionKey
+      }
+    })
+  } catch (error) {
+    ElMessage.error('开始考试失败，请稍后重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(async () => {

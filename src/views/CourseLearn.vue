@@ -265,6 +265,12 @@
             <template #default="scope">
               <div class="activity-title-cell">
                 <span>{{ scope.row.title || '-' }}</span>
+                <span
+                  v-if="scope.row.experienceText !== '-'"
+                  class="activity-experience-text"
+                >
+                  {{ scope.row.experienceText }} 经验值
+                </span>
                 <el-tag :type="scope.row.progressTagType" size="small" effect="light">
                   {{ scope.row.activityProgressText }}
                 </el-tag>
@@ -280,7 +286,6 @@
             </template>
           </el-table-column>
           <el-table-column prop="typeText" label="类型" width="100" align="center" />
-          <el-table-column prop="scoreText" label="分数" width="90" align="center" />
           <el-table-column prop="commentCount" label="参加人数" width="90" align="center" />
           <el-table-column prop="startTime" label="活动开始时间" width="180" />
           <el-table-column prop="endTime" label="活动结束时间" width="180" />
@@ -339,9 +344,10 @@
         v-model="showActivityDialog"
         title="发布活动"
         width="560px"
+        class="publish-activity-dialog"
         :close-on-click-modal="false"
       >
-        <el-form label-width="90px" @submit.prevent="handleCreateActivity">
+        <el-form label-width="112px" @submit.prevent="handleCreateActivity">
           <el-form-item label="活动标题" required>
             <el-input
               v-model="activityForm.title"
@@ -363,10 +369,16 @@
               />
             </el-select>
           </el-form-item>
-          <el-form-item label="活动分数" required>
+          <el-form-item label="活动经验值" required>
             <el-input
               v-model="activityForm.score"
-              placeholder="请输入活动分数"
+              placeholder="请输入活动经验值"
+            />
+          </el-form-item>
+          <el-form-item v-if="Number(activityForm.type) === 2" label="考试分数" required>
+            <el-input
+              v-model="activityForm.examTotalScore"
+              placeholder="请输入考试分数"
             />
           </el-form-item>
           <template v-if="Number(activityForm.type) === 2">
@@ -557,32 +569,45 @@
         title="上传课程资源"
         width="520px"
         :close-on-click-modal="false"
+        @close="handleUploadDialogClose"
       >
-        <el-form label-width="90px">
+        <el-form label-width="90px" class="upload-resource-form">
           <el-form-item label="资源名称">
             <el-input
               v-model="resourceNameInput"
               placeholder="请输入资源名称"
               clearable
+              maxlength="60"
+              show-word-limit
             />
           </el-form-item>
           <el-form-item label="上传文件">
-            <el-upload
-              :auto-upload="false"
-              :show-file-list="false"
-              :limit="1"
-              :on-change="handleSelectUploadFile"
-              accept="*"
-              :disabled="uploadingResource"
-            >
-              <el-button type="primary" plain>选择文件</el-button>
-            </el-upload>
-            <span class="selected-file-name">{{ selectedUploadFileName || '未选择文件' }}</span>
+            <div class="upload-selector-wrap">
+              <el-upload
+                ref="uploadResourceRef"
+                class="resource-upload-picker"
+                drag
+                :auto-upload="false"
+                :show-file-list="false"
+                :limit="1"
+                :on-change="handleSelectUploadFile"
+                accept="*"
+                :disabled="uploadingResource"
+              >
+                <div class="upload-drop-content">
+                  <div class="upload-drop-title">点击或拖拽文件到此处</div>
+                  <div class="upload-drop-tip">支持视频、图片、文档等常见格式</div>
+                </div>
+              </el-upload>
+              <div class="selected-file-name" :class="{ empty: !selectedUploadFileName }">
+                {{ selectedUploadFileName || '暂未选择文件' }}
+              </div>
+            </div>
           </el-form-item>
         </el-form>
 
         <template #footer>
-          <el-button @click="uploadDialogVisible = false" :disabled="uploadingResource">取消</el-button>
+          <el-button @click="handleUploadDialogCancel" :disabled="uploadingResource">取消</el-button>
           <el-button type="primary" :loading="uploadingResource" @click="handleUploadCourseResource">
             确认上传
           </el-button>
@@ -601,9 +626,34 @@ import { courseApi } from '@/api/course'
 import { uploadApi } from '@/api/upload'
 import { studentCourseApi } from '@/api/studentCourse'
 import { activityApi } from '@/api/activity'
-import { testPaperApi } from '@/api/testPaper'
 import { examApi } from '@/api/exam'
 import ActivityDiscussionDetail from '@/views/ActivityDiscussionDetail.vue'
+import {
+  activityTypeOptions,
+  allowRetakeTextOptions,
+  deriveResourceNameFromFileName,
+  detectPreviewMode,
+  detectPreviewType,
+  detectUploadType,
+  examCreateDefaultsText,
+  examDurationTextOptions,
+  examFieldTextNumberMap,
+  extractCreatedId,
+  extractUploadResult,
+  formatDurationLabel,
+  formatFileSize,
+  formatMemberStatus,
+  formatNowDateTime,
+  formatResourceType,
+  getVideoDurationSeconds,
+  maxAttemptsTextOptions,
+  normalizeActivityRows,
+  normalizeCourseRows,
+  parseDateTimeValue,
+  resolveBadgeText,
+  resolvePreviewFrameUrl,
+  showResultsTextOptions
+} from './courseLearn/helpers'
 
 const route = useRoute()
 const router = useRouter()
@@ -619,6 +669,7 @@ const deletingResourceId = ref(null)
 const courseResourceList = ref([])
 const resourceNameInput = ref('')
 const uploadDialogVisible = ref(false)
+const uploadResourceRef = ref(null)
 const selectedUploadFile = ref(null)
 const selectedUploadFileName = ref('')
 const resourceKeyword = ref('')
@@ -646,18 +697,12 @@ const editActivityTimeForm = ref({
   startTime: '',
   endTime: ''
 })
-const activityTypeOptions = [
-  { value: 1, label: '作业' },
-  { value: 2, label: '考试' },
-  { value: 3, label: '讨论' },
-  { value: 4, label: '签到' }
-]
-const activityTotal = ref(0)
 const activities = ref([])
 const activityForm = ref({
   title: '',
   type: '',
   score: '',
+  examTotalScore: '',
   examDurationText: '60分钟',
   allowRetakeText: '否',
   maxAttemptsText: '1次',
@@ -723,6 +768,11 @@ const displayedActivities = computed(() => {
     const endingSoon = Number.isFinite(remainingMs) && remainingMs > 0 && remainingMs <= 24 * 60 * 60 * 1000
     const activityProgressText = notStarted ? '未开始' : (ended ? '已结束' : '进行中')
     const progressTagType = notStarted ? 'warning' : (ended ? 'info' : 'success')
+    const participantCount = Number(
+      typeNumber === 2
+        ? (item.examSum ?? item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0)
+        : (item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0)
+    )
     return {
     ...item,
     backendId: item.id,
@@ -737,10 +787,8 @@ const displayedActivities = computed(() => {
     showStudentUrgentTip: isStudent.value && endingSoon,
     urgentTipText: '不足1天，及时参加',
     typeText,
-    scoreText: Number.isFinite(Number(item.score)) ? Number(item.score) : '-',
-    commentCount: Number(
-      item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0
-    )
+    experienceText: Number.isFinite(Number(item.score)) ? Number(item.score) : '-',
+    commentCount: Number.isFinite(participantCount) ? participantCount : 0
     }
   })
 })
@@ -759,129 +807,6 @@ const handleActivityTabClick = () => {
 
 const goBack = () => {
   router.push('/courses')
-}
-
-const detectUploadType = (fileName = '') => {
-  const name = String(fileName || '').toLowerCase()
-  if (/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/.test(name)) return 'image'
-  if (/\.(mp4|avi|mov|mkv|flv|wmv|webm|m4v)$/.test(name)) return 'video'
-  return 'doc'
-}
-
-const getVideoDurationSeconds = (file) => {
-  return new Promise((resolve) => {
-    try {
-      const objectUrl = URL.createObjectURL(file)
-      const video = document.createElement('video')
-      video.preload = 'metadata'
-      video.src = objectUrl
-
-      const cleanup = () => {
-        URL.revokeObjectURL(objectUrl)
-        video.removeAttribute('src')
-      }
-
-      video.onloadedmetadata = () => {
-        const duration = Math.max(0, Math.round(Number(video.duration) || 0))
-        cleanup()
-        resolve(duration)
-      }
-
-      video.onerror = () => {
-        cleanup()
-        resolve(0)
-      }
-    } catch (error) {
-      resolve(0)
-    }
-  })
-}
-
-const formatResourceType = (value = '', fileName = '') => {
-  const type = String(value || '').toLowerCase()
-  if (type.includes('image') || /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(fileName)) return '图片'
-  if (type.includes('video') || /\.(mp4|avi|mov|mkv|flv|wmv|webm|m4v)$/i.test(fileName)) return '视频'
-  return '文档'
-}
-
-const resolveBasePreviewCategory = (typeText = '', url = '') => {
-  if (typeText.includes('视频') || /\.(mp4|webm|ogg|mov|m4v|avi)$/.test(url)) {
-    return 'video'
-  }
-  if (typeText.includes('图片') || /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/.test(url)) {
-    return 'image'
-  }
-  return 'doc'
-}
-
-const detectPreviewType = (row = {}) => {
-  const typeText = String(row.resourceType || '').toLowerCase()
-  const url = String(row.resourceUrl || '').toLowerCase()
-  return resolveBasePreviewCategory(typeText, url)
-}
-
-const detectPreviewMode = (row = {}) => {
-  const typeText = String(row.resourceType || row.type || '').toLowerCase()
-  const url = String(row.resourceUrl || '').toLowerCase()
-  const baseCategory = resolveBasePreviewCategory(typeText, url)
-
-  if (baseCategory !== 'doc') {
-    return baseCategory
-  }
-  if (typeText.includes('pdf') || /\.pdf($|\?)/.test(url)) {
-    return 'pdf'
-  }
-  if (typeText.includes('文档') || /\.(doc|docx|ppt|pptx|xls|xlsx)$/.test(url)) {
-    return 'office'
-  }
-  return 'doc'
-}
-
-const resolvePreviewFrameUrl = (mode, url) => {
-  if (!url) {
-    return ''
-  }
-  if (mode === 'office') {
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
-  }
-  return url
-}
-
-const formatFileSize = (size) => {
-  const value = Number(size || 0)
-  if (!Number.isFinite(value) || value <= 0) {
-    return '-'
-  }
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(2)} KB`
-  }
-  if (value < 1024 * 1024 * 1024) {
-    return `${(value / (1024 * 1024)).toFixed(2)} MB`
-  }
-  return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
-const formatDurationLabel = (seconds) => {
-  const total = Number(seconds || 0)
-  if (!Number.isFinite(total) || total <= 0) {
-    return ''
-  }
-  const hh = String(Math.floor(total / 3600)).padStart(2, '0')
-  const mm = String(Math.floor((total % 3600) / 60)).padStart(2, '0')
-  const ss = String(total % 60).padStart(2, '0')
-  return `${hh}:${mm}:${ss}`
-}
-
-const parseDateTimeValue = (value = '') => {
-  const raw = String(value || '').trim()
-  if (!raw) {
-    return NaN
-  }
-  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T')
-  return new Date(normalized).getTime()
 }
 
 const disableStartDate = (date) => {
@@ -914,13 +839,6 @@ const disableEditEndDate = (date) => {
     return false
   }
   return date.getTime() < startTimestamp
-}
-
-const formatMemberStatus = (status) => {
-  if (status === 1 || status === '1') return '学习中'
-  if (status === 2 || status === '2') return '已完成'
-  if (status === 0 || status === '0') return '已退课'
-  return '已选课'
 }
 
 const normalizeCourseMembers = (data) => {
@@ -1003,19 +921,6 @@ const loadCourseMembers = async () => {
   }
 }
 
-const normalizeActivityRows = (data) => {
-  if (Array.isArray(data?.rows)) {
-    return data.rows
-  }
-  if (Array.isArray(data?.list)) {
-    return data.list
-  }
-  if (Array.isArray(data)) {
-    return data
-  }
-  return []
-}
-
 const loadActivities = async () => {
   activityLoading.value = true
   try {
@@ -1025,17 +930,14 @@ const loadActivities = async () => {
       const rows = normalizeActivityRows(response.data)
       const total = Number(response?.data?.total ?? response?.data?.count ?? rows.length)
       activities.value = rows
-      activityTotal.value = Number.isFinite(total) ? total : rows.length
-      activityCount.value = activityTotal.value
+      activityCount.value = Number.isFinite(total) ? total : rows.length
     } else {
       activities.value = []
-      activityTotal.value = 0
       activityCount.value = 0
       ElMessage.warning(response?.msg || '获取活动失败')
     }
   } catch (error) {
     activities.value = []
-    activityTotal.value = 0
     activityCount.value = 0
     ElMessage.warning(error.message || '获取活动出错')
   } finally {
@@ -1052,6 +954,7 @@ const openActivityDialog = () => {
     title: '',
     type: '',
     score: '',
+    examTotalScore: '',
     examDurationText: examCreateDefaultsText.duration,
     allowRetakeText: examCreateDefaultsText.allowRetake,
     maxAttemptsText: examCreateDefaultsText.maxAttempts,
@@ -1062,128 +965,64 @@ const openActivityDialog = () => {
   showActivityDialog.value = true
 }
 
-const extractCreatedId = (responseData) => {
-  const candidates = [
-    responseData,
-    responseData?.id,
-    responseData?.activityId,
-    responseData?.testPaperId,
-    responseData?.paperId,
-    responseData?.examId,
-    responseData?.data?.id,
-    responseData?.data?.activityId,
-    responseData?.data?.testPaperId,
-    responseData?.data?.paperId,
-    responseData?.data?.examId
-  ]
-
-  for (const value of candidates) {
-    const id = Number(value)
-    if (Number.isFinite(id) && id > 0) {
-      return id
-    }
-  }
-  return null
-}
-
-const resolveCreatedActivityId = async ({ directData, courseId, title, startTime, endTime }) => {
-  const directId = extractCreatedId(directData)
-  if (Number.isFinite(directId)) {
-    return directId
-  }
-
-  const listResponse = await activityApi.getAllByCourseId(courseId)
-  if (listResponse?.code !== 1) {
-    return null
-  }
-
-  const rows = normalizeActivityRows(listResponse.data)
-  const matched = rows
-    .filter((item = {}) => {
-      const itemTitle = String(item.title || item.activityName || item.name || '').trim()
-      const itemStart = String(item.startTime || item.start_time || '').trim()
-      const itemEnd = String(item.endTime || item.end_time || '').trim()
-      return itemTitle === title && itemStart === startTime && itemEnd === endTime
-    })
-    .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
-
-  const fallbackId = Number(matched[0]?.id || 0)
-  return Number.isFinite(fallbackId) && fallbackId > 0 ? fallbackId : null
-}
-
-const examFieldTextNumberMap = {
-  duration: {
-    '30分钟': 30,
-    '60分钟': 60,
-    '90分钟': 90,
-    '120分钟': 120
-  },
-  allowRetake: {
-    '否': 0,
-    '是': 1
-  },
-  maxAttempts: {
-    '1次': 1,
-    '2次': 2,
-    '3次': 3
-  },
-  showResults: {
-    '否': 0,
-    '是': 1
-  }
-}
-
-const examCreateDefaultsText = {
-  duration: '60分钟',
-  allowRetake: '否',
-  maxAttempts: '1次',
-  showResults: '是'
-}
-const examDurationTextOptions = Object.keys(examFieldTextNumberMap.duration)
-const allowRetakeTextOptions = Object.keys(examFieldTextNumberMap.allowRetake)
-const maxAttemptsTextOptions = Object.keys(examFieldTextNumberMap.maxAttempts)
-const showResultsTextOptions = Object.keys(examFieldTextNumberMap.showResults)
-
-const createExamAfterActivity = async ({
-  activityId,
+const publishExamActivity = async ({
   courseId,
   title,
   score,
+  startTime,
+  endTime,
+  examTotalScore,
   userId,
   examConfig
 }) => {
-  const testPaperPayload = {
-    id: null,
-    title,
-    courseId,
-    totalScore: score,
-    createUser: userId
+  const duration = examFieldTextNumberMap.duration[examConfig.durationText]
+  const allowRetake = examFieldTextNumberMap.allowRetake[examConfig.allowRetakeText]
+  const maxAttempt = examFieldTextNumberMap.maxAttempts[examConfig.maxAttemptsText]
+  const showResult = examFieldTextNumberMap.showResults[examConfig.showResultsText]
+
+  const payload = {
+    activityDto: {
+      id: null,
+      bizId: null,
+      courseId,
+      title,
+      score,
+      type: 2,
+      status: null,
+      startTime,
+      endTime
+    },
+    testPaperDto: {
+      id: null,
+      title,
+      courseId,
+      totalScore: examTotalScore,
+      createUser: userId
+    },
+    examDto: {
+      id: null,
+      paperId: null,
+      duration,
+      totalScore: examTotalScore,
+      allowRetake,
+      maxAttempt,
+      showResult
+    }
   }
 
-  const paperResponse = await testPaperApi.saveTestPaper(testPaperPayload)
-  if (paperResponse?.code !== 1) {
-    throw new Error(paperResponse?.msg || '创建试卷失败')
-  }
-
-  const testPaperId = extractCreatedId(paperResponse?.data ?? paperResponse)
-  if (!Number.isFinite(testPaperId)) {
-    throw new Error('创建试卷成功但未返回试卷ID')
-  }
-
-  const examPayload = {
-    id: null,
-    activityId,
-    paperId: testPaperId,
-    duration: examFieldTextNumberMap.duration[examConfig.durationText],
-    totalScore: score,
-    allowRetake: examFieldTextNumberMap.allowRetake[examConfig.allowRetakeText],
-    maxAttempt: examFieldTextNumberMap.maxAttempts[examConfig.maxAttemptsText],
-    showResult: examFieldTextNumberMap.showResults[examConfig.showResultsText]
-  }
-
-  const examResponse = await examApi.saveExam(examPayload)
+  const examResponse = await examApi.saveExam(payload)
   if (examResponse?.code !== 1) {
-    throw new Error(examResponse?.msg || '创建考试信息失败')
+    throw new Error(examResponse?.msg || '发布考试活动失败')
+  }
+
+  const examId = extractCreatedId(examResponse?.data ?? examResponse)
+  if (!Number.isFinite(examId)) {
+    throw new Error('发布考试活动成功但未返回考试ID')
+  }
+
+  return {
+    response: examResponse,
+    examId
   }
 }
 
@@ -1196,6 +1035,7 @@ const handleCreateActivity = async () => {
   const title = String(activityForm.value.title || '').trim()
   const type = Number(activityForm.value.type)
   const score = Number(activityForm.value.score)
+  const examTotalScore = Number(activityForm.value.examTotalScore)
   const startTime = String(activityForm.value.startTime || '').trim()
   const endTime = String(activityForm.value.endTime || '').trim()
   const examDurationText = String(activityForm.value.examDurationText || '').trim()
@@ -1213,7 +1053,7 @@ const handleCreateActivity = async () => {
     return
   }
   if (!Number.isFinite(score)) {
-    ElMessage.warning('请输入活动分数')
+    ElMessage.warning('请输入活动经验值')
     return
   }
   if (!startTime) {
@@ -1233,6 +1073,10 @@ const handleCreateActivity = async () => {
     return
   }
   if (type === 2) {
+    if (!Number.isFinite(examTotalScore)) {
+      ElMessage.warning('请输入考试分数')
+      return
+    }
     if (!examFieldTextNumberMap.duration[examDurationText]) {
       ElMessage.warning('请选择考试时长')
       return
@@ -1254,42 +1098,39 @@ const handleCreateActivity = async () => {
   creatingActivity.value = true
   try {
     const currentCourseId = Number(courseId.value)
-    const response = await activityApi.save({
+    if (type === 2) {
+      const { response } = await publishExamActivity({
+        courseId: currentCourseId,
+        title,
+        score,
+        startTime,
+        endTime,
+        examTotalScore,
+        userId,
+        examConfig: {
+          durationText: examDurationText,
+          allowRetakeText,
+          maxAttemptsText,
+          showResultsText
+        }
+      })
+
+      ElMessage.success(response?.msg || '活动发布成功')
+      showActivityDialog.value = false
+      await loadActivities()
+      return
+    }
+
+    const activityPayload = {
       title,
       type,
       courseId: currentCourseId,
       score,
       startTime,
       endTime
-    })
+    }
+    const response = await activityApi.save(activityPayload)
     if (response?.code === 1) {
-      const createdActivityId = type === 2
-        ? await resolveCreatedActivityId({
-          directData: response?.data,
-          courseId: currentCourseId,
-          title,
-          startTime,
-          endTime
-        })
-        : null
-
-      if (type === 2 && Number.isFinite(createdActivityId)) {
-        await createExamAfterActivity({
-          activityId: createdActivityId,
-          courseId: currentCourseId,
-          title,
-          score,
-          userId,
-          examConfig: {
-            durationText: examDurationText,
-            allowRetakeText,
-            maxAttemptsText,
-            showResultsText
-          }
-        })
-      } else if (type === 2) {
-        ElMessage.warning('考试活动已发布，但未获取到活动ID，未能自动创建试卷与考试信息')
-      }
       ElMessage.success(response?.msg || '活动发布成功')
       showActivityDialog.value = false
       await loadActivities()
@@ -1332,17 +1173,6 @@ const handleDeleteActivity = async (id) => {
   } finally {
     deletingActivityId.value = null
   }
-}
-
-const formatNowDateTime = () => {
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  const hh = String(now.getHours()).padStart(2, '0')
-  const min = String(now.getMinutes()).padStart(2, '0')
-  const ss = String(now.getSeconds()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`
 }
 
 const handleEndActivity = async (row) => {
@@ -1480,6 +1310,26 @@ const goActivityComments = async (row) => {
   }
 
   if (activityType === 2) {
+    if (canPublishActivity.value) {
+      router.push({
+        name: 'ExamStudentPapers',
+        params: { id: activityId },
+        query: {
+          courseId: String(courseId.value || ''),
+          courseTitle: courseTitle.value || '',
+          teacherName: teacherName.value || '',
+          activityTitle: String(row.title || '').trim()
+        }
+      })
+      return
+    }
+
+    const bizId = Number(row.bizId ?? row.biz_id)
+    if (!Number.isFinite(bizId) || bizId <= 0) {
+      ElMessage.warning('考试ID无效，无法进入考试信息')
+      return
+    }
+
     router.push({
       name: 'ExamActivityInfo',
       params: { id: activityId },
@@ -1487,26 +1337,14 @@ const goActivityComments = async (row) => {
         courseId: String(courseId.value || ''),
         courseTitle: courseTitle.value || '',
         teacherName: teacherName.value || '',
-        startTime: String(row.startTime || row.start_time || '')
+        startTime: String(row.startTime || row.start_time || ''),
+        bizId: String(bizId)
       }
     })
     return
   }
 
   activeActivityRow.value = row
-}
-
-const resolveBadgeText = (category, name = '') => {
-  if (category === 'video') return 'V'
-  if (category === 'image') return 'I'
-
-  const lower = String(name || '').toLowerCase()
-  if (/\.pdf$/.test(lower)) return 'PDF'
-  if (/\.(doc|docx)$/.test(lower)) return 'W'
-  if (/\.(ppt|pptx)$/.test(lower)) return 'P'
-  if (/\.(xls|xlsx)$/.test(lower)) return 'X'
-  if (/\.(txt|md)$/.test(lower)) return 'T'
-  return 'D'
 }
 
 const normalizeResourceList = (data) => {
@@ -1595,48 +1433,6 @@ const resourceProgressPercent = computed(() => {
 
 const toggleGroup = (key) => {
   groupCollapsed.value[key] = !groupCollapsed.value[key]
-}
-
-const extractUploadResult = (response) => {
-  const upload = response?.upload
-  if (upload && typeof upload === 'object') {
-    return {
-      url: upload.url || upload.path || '',
-      path: upload.path || upload.url || '',
-      name: upload.name || ''
-    }
-  }
-
-  const data = response?.data
-  if (typeof data === 'string') {
-    return {
-      url: data,
-      path: data,
-      name: ''
-    }
-  }
-
-  if (data && typeof data === 'object') {
-    const url = data.url || data.fileUrl || data.path || data.filePath || ''
-    const path = data.path || data.filePath || url || ''
-    const name = data.name || data.fileName || data.originName || ''
-    return { url, path, name }
-  }
-
-  return { url: '', path: '', name: '' }
-}
-
-const normalizeCourseRows = (data) => {
-  if (Array.isArray(data?.rows)) {
-    return data.rows
-  }
-  if (Array.isArray(data?.list)) {
-    return data.list
-  }
-  if (Array.isArray(data)) {
-    return data
-  }
-  return []
 }
 
 const verifyStudentAccess = async () => {
@@ -1775,18 +1571,43 @@ const loadCourseResources = async () => {
 }
 
 const openUploadDialog = () => {
+  resourceNameInput.value = ''
+  resetUploadSelection()
   uploadDialogVisible.value = true
+}
+
+const resetUploadSelection = () => {
+  selectedUploadFile.value = null
+  selectedUploadFileName.value = ''
+  uploadResourceRef.value?.clearFiles()
+}
+
+const handleUploadDialogClose = () => {
+  resourceNameInput.value = ''
+  resetUploadSelection()
+}
+
+const handleUploadDialogCancel = () => {
+  if (uploadingResource.value) {
+    return
+  }
+  uploadDialogVisible.value = false
 }
 
 const handleSelectUploadFile = (uploadFile) => {
   const rawFile = uploadFile?.raw
   if (!rawFile) {
-    selectedUploadFile.value = null
-    selectedUploadFileName.value = ''
+    resetUploadSelection()
     return
   }
   selectedUploadFile.value = rawFile
   selectedUploadFileName.value = rawFile.name || ''
+  resourceNameInput.value = deriveResourceNameFromFileName(rawFile.name || '')
+
+  // 清空 Upload 内部 fileList/input 值，允许再次选择同名文件仍触发 on-change。
+  nextTick(() => {
+    uploadResourceRef.value?.clearFiles()
+  })
 }
 
 const handleUploadCourseResource = async () => {
@@ -1847,8 +1668,7 @@ const handleUploadCourseResource = async () => {
     if (saveResponse?.code === 1) {
       ElMessage.success('课程资源上传成功')
       resourceNameInput.value = ''
-      selectedUploadFile.value = null
-      selectedUploadFileName.value = ''
+      resetUploadSelection()
       uploadDialogVisible.value = false
       await loadCourseResources()
     } else {
@@ -2000,777 +1820,4 @@ watch(activeCategory, async (value) => {
 })
 </script>
 
-<style scoped>
-.course-learn-container {
-  --cl-accent: #1677ff;
-  --cl-accent-strong: #0b57d0;
-  --cl-border: #d8e6fb;
-  --cl-surface: #ffffff;
-  --cl-soft-bg: #f3f8ff;
-  --cl-text-main: #1d2b3a;
-  --cl-text-muted: #5f738c;
-  width: 100%;
-  padding: 26px;
-  box-sizing: border-box;
-  min-height: 100%;
-  background:
-    radial-gradient(circle at 10% 3%, rgba(22, 119, 255, 0.14), transparent 30%),
-    radial-gradient(circle at 90% 1%, rgba(59, 130, 246, 0.12), transparent 26%),
-    linear-gradient(180deg, #f4f9ff 0%, #ffffff 56%);
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
-
-.course-learn-container :deep(.el-card) {
-  border: 1px solid #e2edf8;
-  border-radius: 18px;
-  overflow: hidden;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
-}
-
-.course-learn-container :deep(.el-card__header) {
-  background: linear-gradient(135deg, #edf5ff 0%, #ffffff 56%, #f4f9ff 100%);
-  border-bottom: 1px solid #e4eef8;
-  padding: 18px 22px;
-}
-
-.course-learn-container :deep(.el-card__body) {
-  padding: 20px 22px 24px;
-}
-
-.learn-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.learn-back-btn {
-  color: #ffffff !important;
-  background: linear-gradient(90deg, #1677ff 0%, #3b82f6 100%);
-  border-color: transparent;
-  font-weight: 600;
-}
-
-.learn-back-btn:hover,
-.learn-back-btn:focus {
-  color: #ffffff;
-  background: linear-gradient(90deg, #1677ff 0%, #3b82f6 100%);
-  border-color: transparent;
-}
-
-.learn-title {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--cl-text-main);
-}
-
-.learn-meta {
-  margin-top: 6px;
-  color: var(--cl-text-muted);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.resource-toolbar {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.detail-categories {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid var(--cl-border);
-  border-radius: 999px;
-  margin-bottom: 16px;
-  background: #f8fcff;
-  padding: 6px;
-}
-
-.category-item {
-  border: 1px solid transparent;
-  background: transparent;
-  padding: 9px 14px;
-  color: #465569;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 999px;
-  transition: all 0.24s ease;
-}
-
-.category-item:hover {
-  border-color: #d7e7f7;
-  background: #eef6ff;
-}
-
-.category-item.active {
-  color: #ffffff;
-  border-color: transparent;
-  background: linear-gradient(90deg, #1677ff 0%, #3b82f6 100%);
-  box-shadow: 0 8px 16px rgba(22, 119, 255, 0.24);
-}
-
-.category-placeholder {
-  border: 1px solid var(--cl-border);
-  border-radius: 12px;
-  background: #fff;
-  padding: 22px;
-}
-
-.activity-panel {
-  border: 1px solid var(--cl-border);
-  border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #fafdff 100%);
-  padding: 16px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-}
-
-.activity-panel :deep(.activity-click-row) {
-  cursor: pointer;
-}
-
-.activity-panel :deep(.el-table) {
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.activity-panel :deep(.el-table th.el-table__cell) {
-  background: #f0f8ff;
-  color: #254159;
-}
-
-.activity-title-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.activity-panel :deep(.activity-edit-time-btn) {
-  color: #ffffff !important;
-}
-
-.activity-time-form-item :deep(.el-form-item__content) {
-  align-items: flex-start;
-}
-
-.activity-time-range {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: end;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid #e5eef8;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
-}
-
-.activity-time-block {
-  min-width: 0;
-}
-
-.activity-time-label {
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: #5a6b7e;
-}
-
-.activity-time-separator {
-  padding-bottom: 10px;
-  color: #7b8ea3;
-  font-size: 13px;
-}
-
-.activity-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 12px;
-}
-
-.activity-pagination {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-@media (max-width: 768px) {
-  .activity-time-range {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .activity-time-separator {
-    padding-bottom: 0;
-    justify-self: center;
-  }
-}
-
-.member-panel {
-  border: 1px solid var(--cl-border);
-  border-radius: 14px;
-  background: #fff;
-  margin-bottom: 16px;
-  overflow: hidden;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
-}
-
-.member-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 13px 16px;
-  background: linear-gradient(90deg, #edf7ff 0%, #f8fbff 100%);
-  border-bottom: 1px solid #e1ecf8;
-}
-
-.member-panel-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1f3650;
-}
-
-
-.member-panel-body {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-}
-
-.member-list {
-  border-right: 1px solid #edf1f6;
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-.member-list-item {
-  width: 100%;
-  border: none;
-  background: #fff;
-  padding: 11px 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  text-align: left;
-  border-bottom: 1px solid #edf3f8;
-  transition: background 0.2s ease;
-}
-
-.member-list-item-readonly {
-  cursor: default;
-}
-
-.member-list-item:hover {
-  background: #f8fbff;
-}
-
-.member-list-item.active {
-  background: linear-gradient(90deg, #e9f5ff 0%, #f5faff 100%);
-}
-
-.member-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #3b82f6;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.member-avatar-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.member-avatar.large {
-  width: 52px;
-  height: 52px;
-  font-size: 20px;
-}
-
-.member-list-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.member-name {
-  font-size: 14px;
-  color: #223044;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.member-account {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #7c8ca2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.member-rank {
-  width: 20px;
-  min-width: 20px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 700;
-  color: #b0bec5;
-}
-.member-rank-top1 { color: #f5a623; }
-.member-rank-top2 { color: #9e9e9e; }
-.member-rank-top3 { color: #a0522d; }
-
-.member-score {
-  color: #0ea5e9;
-  font-weight: 700;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.member-detail {
-  padding: 16px 18px;
-}
-
-.member-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.member-detail-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1f2d40;
-}
-
-.member-detail-account {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #7e8ca0;
-}
-
-.member-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.member-metric-item {
-  background: linear-gradient(180deg, #f5faff 0%, #ffffff 100%);
-  border: 1px solid #e3edf8;
-  border-radius: 8px;
-  padding: 11px;
-}
-
-.member-metric-item .label {
-  font-size: 12px;
-  color: #7a8ca5;
-}
-
-.member-metric-item .value {
-  margin-top: 6px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e2f45;
-}
-
-.member-pagination {
-  border-top: 1px solid #edf1f6;
-  padding: 12px 14px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-
-.resource-overview {
-  display: grid;
-  grid-template-columns: 1fr 150px 150px;
-  gap: 10px;
-  border: 1px solid var(--cl-border);
-  border-radius: 14px;
-  background: linear-gradient(120deg, #f8fcff 0%, #ffffff 100%);
-  padding: 16px;
-  margin-bottom: 14px;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
-}
-
-.resource-overview-main {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.resource-overview-title {
-  font-size: 14px;
-  color: #6b7280;
-  margin-bottom: 10px;
-}
-
-.resource-progress-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.resource-progress-track {
-  flex: 1;
-  height: 10px;
-  border-radius: 8px;
-  background: #e8edf2;
-  overflow: hidden;
-}
-
-.resource-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #22c55e 0%, #84cc16 100%);
-  border-radius: 8px;
-  transition: width 0.35s ease;
-}
-
-.resource-progress-percent {
-  color: #69c31c;
-  font-size: 28px;
-  line-height: 1;
-  font-weight: 700;
-}
-
-.resource-overview-stat {
-  border-left: 1px solid #e6edf5;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-.resource-overview-stat .stat-title {
-  font-size: 12px;
-  color: #8a96a6;
-}
-
-.resource-overview-stat .stat-value {
-  margin-top: 8px;
-  font-size: 22px;
-  color: #4b5563;
-  font-weight: 700;
-}
-
-.resource-search-bar {
-  margin-bottom: 12px;
-}
-
-.resource-sections {
-  border: 1px solid var(--cl-border);
-  border-radius: 14px;
-  overflow: hidden;
-  background: #fff;
-  padding: 12px;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-}
-
-.resource-group + .resource-group {
-  margin-top: 8px;
-}
-
-.resource-group-header {
-  min-height: 36px;
-  background: linear-gradient(90deg, #eef5fb 0%, #f8fbff 100%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  color: #3f4e62;
-  cursor: pointer;
-  border-radius: 8px;
-}
-
-.resource-group-title {
-  font-weight: 600;
-}
-
-.resource-group-arrow {
-  color: #9aa0a6;
-  font-size: 14px;
-}
-
-.resource-group-body {
-  margin-top: 4px;
-  padding: 0 10px;
-  border: 1px solid #edf2f8;
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-}
-
-.resource-item-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 82px;
-  border-bottom: 1px solid #edf3f8;
-  gap: 10px;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.resource-item-row-disabled {
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.resource-item-row:hover {
-  background: #f7fbff;
-}
-
-.resource-item-row:last-child {
-  border-bottom: none;
-}
-
-.resource-item-left {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 12px;
-}
-
-.resource-thumb {
-  width: 58px;
-  height: 42px;
-  border-radius: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.thumb-video {
-  background: #1890ff;
-}
-
-.thumb-doc {
-  background: #5b8ff9;
-}
-
-.thumb-image {
-  background: #52c41a;
-}
-
-.thumb-other {
-  background: #909399;
-}
-
-.resource-badge {
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 15px;
-  color: #fff;
-  flex-shrink: 0;
-}
-
-.badge-video {
-  background: #3a7afe;
-}
-
-.badge-doc {
-  background: #5b8ff9;
-}
-
-.badge-image {
-  background: #52c41a;
-}
-
-.badge-other {
-  background: #909399;
-}
-
-.resource-item-content {
-  min-width: 0;
-}
-
-.resource-item-title {
-  color: #303133;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  border: none;
-  background: transparent;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-}
-
-.resource-item-title:hover {
-  color: #0ea5e9;
-}
-
-.resource-item-meta {
-  color: #909399;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.resource-item-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.resource-link {
-  color: #606266;
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.resource-link:hover {
-  color: #0ea5e9;
-}
-
-.selected-file-name {
-  margin-left: 10px;
-  color: #909399;
-  font-size: 13px;
-}
-
-
-.preview-container {
-  width: 100%;
-  min-height: 520px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f8fafc;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.preview-video {
-  width: 100%;
-  max-height: 72vh;
-  background: #000;
-}
-
-.preview-image {
-  max-width: 100%;
-  max-height: 72vh;
-  object-fit: contain;
-}
-
-.preview-iframe {
-  width: 100%;
-  height: 72vh;
-  background: #fff;
-}
-
-.preview-tip {
-  margin-top: 10px;
-  color: #909399;
-  font-size: 13px;
-}
-
-.course-learn-container :deep(.el-button--primary) {
-  background: linear-gradient(90deg, #1677ff 0%, #3b82f6 100%);
-  border: none;
-}
-
-.course-learn-container :deep(.el-button--primary:hover) {
-  filter: brightness(1.03);
-}
-
-.course-learn-container :deep(.el-pagination.is-background .el-pager li.is-active) {
-  background: linear-gradient(90deg, #1677ff 0%, #3b82f6 100%);
-}
-
-@media (max-width: 960px) {
-  .course-learn-container {
-    padding: 14px;
-  }
-
-  .detail-categories {
-    gap: 8px;
-    overflow-x: auto;
-    white-space: nowrap;
-    border-radius: 14px;
-  }
-
-  .category-item {
-    font-size: 13px;
-    padding: 8px 12px;
-  }
-
-  .member-panel-body {
-    grid-template-columns: 1fr;
-  }
-
-  .member-list {
-    border-right: none;
-    border-bottom: 1px solid #edf1f6;
-  }
-
-  .resource-overview {
-    grid-template-columns: 1fr;
-  }
-
-  .resource-overview-stat {
-    border-left: none;
-    border-top: 1px solid #eceff3;
-    padding-top: 10px;
-  }
-
-  .course-learn-container :deep(.el-card__body) {
-    padding: 14px;
-  }
-}
-
-.preview-fallback {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #606266;
-  font-size: 14px;
-}
-
-.preview-fallback-title {
-  font-weight: 600;
-}
-
-@media (max-width: 900px) {
-  .resource-item-row {
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 10px 0;
-  }
-
-  .resource-item-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-}
-</style>
+<style scoped src="./courseLearn/CourseLearn.css"></style>

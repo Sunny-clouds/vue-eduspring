@@ -14,6 +14,7 @@ const DiscussionDetail = () => import('@/views/DiscussionDetail.vue')
 const ActivityDiscussionDetail = () => import('@/views/ActivityDiscussionDetail.vue')
 const ExamActivityInfo = () => import('@/views/ExamActivityInfo.vue')
 const ExamTaking = () => import('@/views/ExamTaking.vue')
+const ExamStudentPapers = () => import('@/views/ExamStudentPapers.vue')
 const QuestionBank = () => import('@/views/QuestionBank.vue')
 const Profile = () => import('@/views/Profile.vue')
 const Users = () => import('@/views/Users.vue')
@@ -89,6 +90,12 @@ const routes = [
     path: '/activity/:id/exam',
     name: 'ExamTaking',
     component: ExamTaking,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/activity/:id/exam-student-papers',
+    name: 'ExamStudentPapers',
+    component: ExamStudentPapers,
     meta: { requiresAuth: true }
   },
   {
