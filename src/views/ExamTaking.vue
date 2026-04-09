@@ -83,6 +83,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { studentAnswerApi } from '@/api/studentAnswer'
+import { examApi } from '@/api/exam'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -310,6 +311,110 @@ const stopTimer = () => {
   }
 }
 
+const resolveCurrentStudentId = () => {
+  const user = userStore.user || {}
+  const candidates = [user.id, user.userId, user.uid, user.studentId, route.query.studentId]
+  for (const value of candidates) {
+    const sid = Number(value)
+    if (Number.isFinite(sid) && sid > 0) {
+      return sid
+    }
+  }
+  return null
+}
+
+const normalizeOwnScoreValue = (data) => {
+  const rows = Array.isArray(data?.rows)
+    ? data.rows
+    : (Array.isArray(data?.list) ? data.list : null)
+  const source = rows && rows.length > 0
+    ? rows[0]
+    : (data?.scoreDto || data?.studentScore || data)
+  const score = Number(source?.totalScore ?? source?.score ?? source?.examScore)
+  return Number.isFinite(score) ? String(score) : '-'
+}
+
+const resolveShowResultFlag = async () => {
+  const fromQuery = Number(route.query.showResult)
+  if (fromQuery === 1 || fromQuery === 0) {
+    return fromQuery === 1
+  }
+
+  const sessionKey = String(sessionKeyRef.value || '')
+  if (sessionKey) {
+    try {
+      const raw = sessionStorage.getItem(sessionKey)
+      const parsed = raw ? JSON.parse(raw) : null
+      const fromSession = Number(parsed?.showResult)
+      if (fromSession === 1 || fromSession === 0) {
+        return fromSession === 1
+      }
+    } catch (error) {
+      // Ignore parse errors and continue fallback.
+    }
+  }
+
+  const bizId = Number(route.query.bizId)
+  if (!Number.isFinite(bizId) || bizId <= 0) {
+    return false
+  }
+
+  try {
+    const response = await examApi.getExamByBizId(bizId)
+    if (response?.code === 1) {
+      return Number(response?.data?.showResult) === 1
+    }
+  } catch (error) {
+    // Ignore API errors and keep default behavior.
+  }
+
+  return false
+}
+
+const showScoreAfterSubmitIfNeeded = async () => {
+  const canShowResultNow = await resolveShowResultFlag()
+  if (!canShowResultNow) {
+    return
+  }
+
+  const studentId = resolveCurrentStudentId()
+  if (!Number.isFinite(studentId) || studentId <= 0) {
+    ElMessage.warning('未获取到当前学生ID，暂时无法显示成绩')
+    return
+  }
+
+  const currentPaperId = Number(
+    paperId.value
+    ?? studentPaperRef.value?.paperId
+    ?? route.query.paperId
+  )
+  if (!Number.isFinite(currentPaperId) || currentPaperId <= 0) {
+    ElMessage.warning('未获取到试卷ID，暂时无法显示成绩')
+    return
+  }
+
+  try {
+    const response = await examApi.getScoreByStudentIdAndPaperId(studentId, currentPaperId)
+    if (response?.code !== 1) {
+      ElMessage.warning(response?.msg || '成绩查询失败，请稍后在考试信息页查看')
+      return
+    }
+
+    const scoreText = normalizeOwnScoreValue(response?.data)
+    await ElMessageBox.alert(
+      `已提交成功<br/>我的成绩：${scoreText}`,
+      '考试成绩',
+      {
+        dangerouslyUseHTMLString: true,
+        confirmButtonText: '知道了',
+        type: 'success'
+      }
+    )
+  } catch (error) {
+    ElMessage.warning(error.message || '成绩查询失败，请稍后在考试信息页查看')
+  }
+}
+
 const navigateBackToExamInfo = () => {
   router.push({
     name: 'ExamActivityInfo',
@@ -323,7 +428,7 @@ const navigateBackToExamInfo = () => {
   })
 }
 
-const finalizeSubmitExam = ({ reason = 'manual', tipText = '试卷提交成功' } = {}) => {
+const finalizeSubmitExam = async ({ reason = 'manual', tipText = '试卷提交成功' } = {}) => {
   const sessionKey = String(sessionKeyRef.value || '')
   const answers = buildSubmitAnswers()
 
@@ -344,6 +449,7 @@ const finalizeSubmitExam = ({ reason = 'manual', tipText = '试卷提交成功' 
   }
 
   ElMessage.success(tipText)
+  await showScoreAfterSubmitIfNeeded()
   navigateBackToExamInfo()
 }
 
@@ -377,7 +483,7 @@ const handleSubmitExam = async () => {
   stopTimer()
   try {
     await saveStudentAnswers()
-    finalizeSubmitExam({ reason: 'manual', tipText: '试卷提交成功' })
+    await finalizeSubmitExam({ reason: 'manual', tipText: '试卷提交成功' })
   } catch (error) {
     ElMessage.error(error.message || '提交试卷失败')
   } finally {
@@ -395,7 +501,7 @@ const autoSubmitExam = async () => {
   stopTimer()
   try {
     await saveStudentAnswers()
-    finalizeSubmitExam({ reason: 'timeout', tipText: '考试时间到，已自动交卷' })
+    await finalizeSubmitExam({ reason: 'timeout', tipText: '考试时间到，已自动交卷' })
   } catch (error) {
     ElMessage.error(error.message || '自动交卷失败，请联系老师处理')
   } finally {

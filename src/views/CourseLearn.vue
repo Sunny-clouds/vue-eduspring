@@ -530,6 +530,7 @@
             ref="previewVideoRef"
             :src="previewUrl"
             @loadedmetadata="handlePreviewVideoLoaded"
+            @timeupdate="handlePreviewVideoTimeUpdate"
             controls
             class="preview-video"
           />
@@ -622,6 +623,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { userApi } from '@/api/user'
 import { courseApi } from '@/api/course'
 import { uploadApi } from '@/api/upload'
 import { studentCourseApi } from '@/api/studentCourse'
@@ -638,7 +640,6 @@ import {
   examCreateDefaultsText,
   examDurationTextOptions,
   examFieldTextNumberMap,
-  extractCreatedId,
   extractUploadResult,
   formatDurationLabel,
   formatFileSize,
@@ -680,6 +681,10 @@ const previewType = ref('doc')
 const previewFrameUrl = ref('')
 const previewVideoRef = ref(null)
 const previewPositionMap = ref({})
+const currentPreviewResource = ref(null)
+const videoProgressIdMap = ref({})
+const lastReportedDurationMap = ref({})
+const progressReportInFlight = ref(false)
 const activeCategory = ref('resource')
 const activityCount = ref(0)
 const messageCount = ref(0)
@@ -715,6 +720,7 @@ const activeMemberId = ref(null)
 const memberPage = ref(1)
 const memberPageSize = ref(10)
 const memberTotal = ref(0)
+const courseProgressPercent = ref(0)
 const groupCollapsed = ref({
   video: false,
   doc: false,
@@ -873,11 +879,55 @@ const normalizeCourseMembers = (data) => {
   })
 }
 
+const normalizeProgressPercent = (value) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return null
+  }
+  return Math.min(100, Math.max(0, Math.round(parsed)))
+}
+
+const resolveCourseProgressPercent = (rows = [], responseData = null) => {
+  const responseProgress = normalizeProgressPercent(responseData?.progress)
+  if (responseProgress !== null) {
+    return responseProgress
+  }
+
+  const extractRowProgress = (item = {}) => normalizeProgressPercent(item.progress ?? item.studyProgress ?? item.schedule)
+
+  if (isStudent.value) {
+    const username = currentUserName.value
+    const nickname = currentUserNickname.value
+    const selfRow = rows.find((item = {}) => {
+      const rowUsername = String(item.username || item.userName || item.account || '').trim()
+      const rowNickname = String(item.nickname || item.nickName || item.studentName || '').trim()
+      if (username && rowUsername === username) {
+        return true
+      }
+      return !!(nickname && rowNickname === nickname)
+    })
+    const selfProgress = extractRowProgress(selfRow)
+    return selfProgress ?? 0
+  }
+
+  const progressValues = rows
+    .map(item => extractRowProgress(item))
+    .filter(item => item !== null)
+
+  if (progressValues.length === 0) {
+    return 0
+  }
+
+  const sum = progressValues.reduce((acc, item) => acc + item, 0)
+  return Math.round(sum / progressValues.length)
+}
+
 const loadCourseMembers = async () => {
   if (!Number.isFinite(courseId.value)) {
     courseMembers.value = []
     activeMemberId.value = null
     memberTotal.value = 0
+    courseProgressPercent.value = 0
     return
   }
 
@@ -890,6 +940,7 @@ const loadCourseMembers = async () => {
         : (Array.isArray(response?.data?.list)
           ? response.data.list
           : (Array.isArray(response?.data) ? response.data : []))
+      courseProgressPercent.value = resolveCourseProgressPercent(rows, response?.data)
       const members = normalizeCourseMembers(rows)
       const total = Number(response?.data?.total ?? response?.data?.count ?? members.length)
       courseMembers.value = members.sort((a, b) => (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0))
@@ -911,11 +962,13 @@ const loadCourseMembers = async () => {
       courseMembers.value = []
       activeMemberId.value = null
       memberTotal.value = 0
+      courseProgressPercent.value = 0
     }
   } catch (error) {
     courseMembers.value = []
     activeMemberId.value = null
     memberTotal.value = 0
+    courseProgressPercent.value = 0
   } finally {
     memberLoading.value = false
   }
@@ -1015,14 +1068,8 @@ const publishExamActivity = async ({
     throw new Error(examResponse?.msg || '发布考试活动失败')
   }
 
-  const examId = extractCreatedId(examResponse?.data ?? examResponse)
-  if (!Number.isFinite(examId)) {
-    throw new Error('发布考试活动成功但未返回考试ID')
-  }
-
   return {
-    response: examResponse,
-    examId
+    response: examResponse
   }
 }
 
@@ -1310,23 +1357,95 @@ const goActivityComments = async (row) => {
   }
 
   if (activityType === 2) {
-    if (canPublishActivity.value) {
-      router.push({
-        name: 'ExamStudentPapers',
-        params: { id: activityId },
-        query: {
-          courseId: String(courseId.value || ''),
-          courseTitle: courseTitle.value || '',
-          teacherName: teacherName.value || '',
-          activityTitle: String(row.title || '').trim()
-        }
-      })
-      return
-    }
-
     const bizId = Number(row.bizId ?? row.biz_id)
     if (!Number.isFinite(bizId) || bizId <= 0) {
       ElMessage.warning('考试ID无效，无法进入考试信息')
+      return
+    }
+
+    if (isStudent.value && row?.ended) {
+      const studentId = Number(
+        userStore.user?.id
+        ?? userStore.user?.userId
+        ?? userStore.user?.uid
+        ?? userStore.user?.studentId
+      )
+      if (!Number.isFinite(studentId) || studentId <= 0) {
+        ElMessage.warning('未获取到当前学生ID，无法查询成绩')
+        return
+      }
+
+      try {
+        const examResponse = await examApi.getExamByBizId(bizId)
+        if (examResponse?.code !== 1) {
+          ElMessage.warning(examResponse?.msg || '获取考试信息失败')
+          return
+        }
+
+        const examData = examResponse?.data || {}
+        const showResult = Number(examData.showResult)
+        if (showResult !== 1) {
+          ElMessage.warning('活动已结束')
+          return
+        }
+
+        const paperId = Number(
+          examData.paperId
+          ?? examData.testPaperId
+          ?? examData.paper_id
+          ?? examData.test_paper_id
+        )
+        if (!Number.isFinite(paperId) || paperId <= 0) {
+          ElMessage.warning('未获取到试卷ID，无法查询成绩')
+          return
+        }
+
+        const scoreResponse = await examApi.getScoreByStudentIdAndPaperId(studentId, paperId)
+        if (scoreResponse?.code !== 1) {
+          ElMessage.warning(scoreResponse?.msg || '查询成绩失败')
+          return
+        }
+
+        const scoreData = scoreResponse?.data || {}
+        const firstRow = Array.isArray(scoreData?.rows) ? scoreData.rows[0] : null
+        const score = Number(
+          scoreData?.totalScore
+          ?? scoreData?.score
+          ?? scoreData?.examScore
+          ?? firstRow?.totalScore
+          ?? firstRow?.score
+          ?? firstRow?.examScore
+        )
+
+        const examTitle = String(examData.title || row.title || '').trim() || '-'
+        const totalScore = Number(examData.totalScore)
+        const totalScoreText = Number.isFinite(totalScore) ? `${totalScore}` : '-'
+
+        if (Number.isFinite(score)) {
+          await ElMessageBox.alert(
+            `考试：${examTitle}<br/>总分：${totalScoreText}<br/>我的成绩：${score}`,
+            '考试成绩',
+            {
+              dangerouslyUseHTMLString: true,
+              confirmButtonText: '知道了',
+              type: 'success'
+            }
+          )
+          return
+        }
+
+        await ElMessageBox.alert(
+          `考试：${examTitle}<br/>总分：${totalScoreText}<br/>我的成绩：暂无`,
+          '考试成绩',
+          {
+            dangerouslyUseHTMLString: true,
+            confirmButtonText: '知道了',
+            type: 'info'
+          }
+        )
+      } catch (error) {
+        ElMessage.error(error.message || '查询成绩出错')
+      }
       return
     }
 
@@ -1337,6 +1456,7 @@ const goActivityComments = async (row) => {
         courseId: String(courseId.value || ''),
         courseTitle: courseTitle.value || '',
         teacherName: teacherName.value || '',
+        activityTitle: String(row.title || '').trim(),
         startTime: String(row.startTime || row.start_time || ''),
         bizId: String(bizId)
       }
@@ -1424,12 +1544,7 @@ const filteredResourceGroups = computed(() => {
 
 const totalResourceCount = computed(() => courseResourceList.value.length)
 const learnedResourceCount = computed(() => (canAccessResources.value ? totalResourceCount.value : 0))
-const resourceProgressPercent = computed(() => {
-  if (totalResourceCount.value <= 0) {
-    return 0
-  }
-  return Math.round((learnedResourceCount.value / totalResourceCount.value) * 100)
-})
+const resourceProgressPercent = computed(() => (canAccessResources.value ? courseProgressPercent.value : 0))
 
 const toggleGroup = (key) => {
   groupCollapsed.value[key] = !groupCollapsed.value[key]
@@ -1728,6 +1843,7 @@ const openPreviewDialog = (row) => {
   previewType.value = detectPreviewMode(row)
   previewFrameUrl.value = resolvePreviewFrameUrl(previewType.value, url)
   previewDialogVisible.value = true
+  currentPreviewResource.value = row || null
 
   if (previewType.value === 'video') {
     nextTick(() => {
@@ -1742,6 +1858,88 @@ const openPreviewDialog = (row) => {
       }
     })
   }
+}
+
+const reportVideoProgress = async ({ force = false } = {}) => {
+  if (!isStudent.value || previewType.value !== 'video') {
+    return
+  }
+  if (progressReportInFlight.value) {
+    return
+  }
+
+  const studentId = Number(
+    userStore.user?.id
+    ?? userStore.user?.userId
+    ?? userStore.user?.uid
+    ?? userStore.user?.studentId
+  )
+  const videoId = Number(
+    currentPreviewResource.value?.backendId
+    ?? currentPreviewResource.value?.id
+    ?? currentPreviewResource.value?.resourceId
+  )
+  const currentCourseId = Number(courseId.value)
+  const currentTime = Math.max(0, Math.floor(Number(previewVideoRef.value?.currentTime || 0)))
+  const reportKey = String(videoId || '')
+  const resolvedProgressId = Number(
+    videoProgressIdMap.value[reportKey]
+    ?? currentPreviewResource.value?.progressId
+    ?? currentPreviewResource.value?.recordId
+    ?? currentPreviewResource.value?.saveProgressId
+  )
+  const lastReportedDuration = Number(lastReportedDurationMap.value[reportKey] || 0)
+  const minIntervalSeconds = 15
+
+  if (!Number.isFinite(studentId) || studentId <= 0) {
+    return
+  }
+  if (!Number.isFinite(videoId) || videoId <= 0) {
+    return
+  }
+  if (!Number.isFinite(currentCourseId) || currentCourseId <= 0) {
+    return
+  }
+  if (currentTime <= 0) {
+    return
+  }
+  if (!force && currentTime - lastReportedDuration < minIntervalSeconds) {
+    return
+  }
+  if (force && currentTime <= lastReportedDuration) {
+    return
+  }
+
+  try {
+    progressReportInFlight.value = true
+    const response = await userApi.saveProgress({
+      id: Number.isFinite(resolvedProgressId) && resolvedProgressId > 0 ? resolvedProgressId : null,
+      studentId,
+      videoId,
+      courseId: currentCourseId,
+      currentTime,
+      // Keep legacy field for backward compatibility with older backend DTO names.
+      duration: currentTime
+    })
+    const returnedProgressId = Number(
+      response?.data?.id
+      ?? response?.data?.progressId
+      ?? response?.id
+      ?? response?.progressId
+    )
+    if (Number.isFinite(returnedProgressId) && returnedProgressId > 0) {
+      videoProgressIdMap.value[reportKey] = returnedProgressId
+    }
+    lastReportedDurationMap.value[reportKey] = currentTime
+  } catch (error) {
+    // Ignore reporting failure to avoid interrupting preview flow.
+  } finally {
+    progressReportInFlight.value = false
+  }
+}
+
+const handlePreviewVideoTimeUpdate = () => {
+  reportVideoProgress()
 }
 
 const handleResourceClick = (row) => {
@@ -1774,12 +1972,14 @@ const handlePreviewVideoLoaded = () => {
   }
 }
 
-const handlePreviewClose = () => {
+const handlePreviewClose = async () => {
   const video = previewVideoRef.value
   if (video && previewType.value === 'video') {
     previewPositionMap.value[previewUrl.value] = Number(video.currentTime || 0)
     video.pause()
+    await reportVideoProgress({ force: true })
   }
+  currentPreviewResource.value = null
   previewDialogVisible.value = false
 }
 

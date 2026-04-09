@@ -23,7 +23,7 @@ export const studentCourseApi = {
     return request.post('/studentCourse/save', data)
   },
 
-  // 修改选课进度
+  // 已废弃：修改选课进度，请改用 userApi.saveProgress（/user/progress/saveProgress）
   update(data) {
     return request.put('/studentCourse/update', data)
   },
@@ -58,6 +58,7 @@ export const studentCourseApi = {
     return request.delete(`/studentCourse/delByUserName/${id}`)
   },
 
+  // 已废弃：修改选课进度，请改用 userApi.saveProgress（/user/progress/saveProgress）
   updateProgress(id, progress) {
     return request.put('/studentCourse/update', { id, progress })
   }

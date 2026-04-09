@@ -43,12 +43,24 @@
         <el-button
           v-if="canEditExamConfig"
           plain
+          @click="goStudentPapers"
+        >
+          查看所有学生考试成绩
+        </el-button>
+        <el-button
+          v-if="canEditExamConfig"
+          plain
           :disabled="!isExamNotStarted || updating"
           @click="openEditDialog"
         >
           修改考试信息
         </el-button>
-        <el-button type="primary" size="large" @click="startExam">开始考试</el-button>
+        <el-button type="primary" size="large" :loading="loadingMyScore" @click="startExam">{{ primaryActionText }}</el-button>
+      </div>
+
+      <div v-if="isStudent && hasOwnScore" class="my-score-card">
+        <div class="my-score-label">我的成绩</div>
+        <div class="my-score-value">{{ ownScoreText }}</div>
       </div>
 
       <el-dialog
@@ -105,8 +117,10 @@ const userStore = useUserStore()
 
 const loading = ref(false)
 const updating = ref(false)
+const loadingMyScore = ref(false)
 const editDialogVisible = ref(false)
 const examDetailRaw = ref({})
+const ownScoreText = ref('')
 const editForm = ref({
   durationText: '60分钟',
   totalScore: '',
@@ -121,6 +135,7 @@ const bizId = computed(() => {
   return Number.isFinite(fromQuery) && fromQuery > 0 ? fromQuery : null
 })
 const canEditExamConfig = computed(() => userStore.isAdmin || userStore.isTeacher)
+const isStudent = computed(() => userStore.isStudent)
 
 const mapDurationTextToNumber = {
   '30分钟': 30,
@@ -237,10 +252,134 @@ const isExamNotStarted = computed(() => {
   return Date.now() < startMs
 })
 
+const isExamEnded = computed(() => {
+  const fromRoute = parseDateTime(route.query.endTime)
+  const fromDetail = parseDateTime(examDetailRaw.value?.endTime)
+  const endMs = fromRoute ?? fromDetail
+  if (!Number.isFinite(endMs)) {
+    return false
+  }
+  return Date.now() > endMs
+})
+
+const canShowStudentScoreNow = computed(() => {
+  const showResult = Number(examDetailRaw.value?.showResult)
+  return showResult === 1
+})
+
+const showEndedStudentScoreCard = computed(() => isStudent.value && isExamEnded.value)
+const hasOwnScore = computed(() => String(ownScoreText.value || '').trim() !== '')
+
+const primaryActionText = computed(() => {
+  if (showEndedStudentScoreCard.value) {
+    return '查看我的成绩'
+  }
+  return '开始考试'
+})
+
+const resolveCurrentStudentId = () => {
+  const user = userStore.user || {}
+  const candidates = [user.id, user.userId, user.uid, user.studentId, route.query.studentId]
+  for (const value of candidates) {
+    const sid = Number(value)
+    if (Number.isFinite(sid) && sid > 0) {
+      return sid
+    }
+  }
+  return null
+}
+
+const normalizeOwnScoreValue = (data) => {
+  const rows = Array.isArray(data?.rows)
+    ? data.rows
+    : (Array.isArray(data?.list) ? data.list : null)
+  const source = rows && rows.length > 0
+    ? rows[0]
+    : (data?.scoreDto || data?.studentScore || data)
+  const score = Number(source?.totalScore ?? source?.score ?? source?.examScore)
+  return Number.isFinite(score) ? String(score) : ''
+}
+
+const loadOwnScoreForPanel = async () => {
+  ownScoreText.value = ''
+  if (!isStudent.value || !canShowStudentScoreNow.value) {
+    return
+  }
+
+  const studentId = resolveCurrentStudentId()
+  if (!Number.isFinite(studentId) || studentId <= 0) {
+    return
+  }
+
+  const paperId = resolvePaperId(examDetailRaw.value)
+  if (!Number.isFinite(paperId) || paperId <= 0) {
+    return
+  }
+
+  try {
+    const response = await examApi.getScoreByStudentIdAndPaperId(studentId, paperId)
+    if (response?.code !== 1) {
+      return
+    }
+    ownScoreText.value = normalizeOwnScoreValue(response?.data)
+  } catch (error) {
+    // Ignore errors for panel rendering to avoid noisy prompts.
+  }
+}
+
+const loadOwnScore = async () => {
+  if (!showEndedStudentScoreCard.value) {
+    ElMessage.warning('当前不是已结束考试，无法查看成绩')
+    return
+  }
+  if (!canShowStudentScoreNow.value) {
+    ElMessage.warning('老师未开启立即显示成绩，暂时无法查看')
+    return
+  }
+
+  const studentId = resolveCurrentStudentId()
+  if (!Number.isFinite(studentId) || studentId <= 0) {
+    ElMessage.warning('未获取到当前学生ID，无法查询成绩')
+    return
+  }
+
+  const paperId = resolvePaperId(examDetailRaw.value)
+  if (!Number.isFinite(paperId) || paperId <= 0) {
+    ElMessage.warning('未获取到试卷ID，无法查询成绩')
+    return
+  }
+
+  loadingMyScore.value = true
+  try {
+    const response = await examApi.getScoreByStudentIdAndPaperId(studentId, paperId)
+    if (response?.code === 1) {
+      const scoreText = normalizeOwnScoreValue(response?.data) || '-'
+      const title = String(examDetailRaw.value?.title || '-').trim() || '-'
+      const totalScore = Number(examDetailRaw.value?.totalScore)
+      const totalScoreText = Number.isFinite(totalScore) ? `${totalScore}` : '-'
+      await ElMessageBox.alert(
+        `考试：${title}<br/>总分：${totalScoreText}<br/>我的成绩：${scoreText}`,
+        '考试成绩',
+        {
+          dangerouslyUseHTMLString: true,
+          confirmButtonText: '知道了',
+          type: 'success'
+        }
+      )
+      return
+    }
+    ElMessage.warning(response?.msg || '查询成绩失败')
+  } catch (error) {
+    ElMessage.error(error.message || '查询成绩出错')
+  } finally {
+    loadingMyScore.value = false
+  }
+}
+
 const examDetail = computed(() => {
   const detail = examDetailRaw.value || {}
   const allowRetake = Number(detail.allowRetake)
-  const showResult = Number(detail.showResults ?? detail.showResult)
+  const showResult = Number(detail.showResult)
   const duration = Number(detail.duration)
   const totalScore = Number(detail.totalScore)
   const maxAttempt = Number(detail.maxAttempts ?? detail.maxAttempt)
@@ -290,7 +429,7 @@ const openEditDialog = () => {
   const duration = Number(detail.duration)
   const allowRetake = Number(detail.allowRetake)
   const maxAttempt = Number(detail.maxAttempt ?? detail.maxAttempts)
-  const showResult = Number(detail.showResult ?? detail.showResults)
+  const showResult = Number(detail.showResult)
   const totalScore = Number(detail.totalScore)
 
   editForm.value = {
@@ -384,7 +523,31 @@ const goBack = () => {
   router.back()
 }
 
+const goStudentPapers = () => {
+  const aid = Number(activityId.value)
+  if (!Number.isFinite(aid) || aid <= 0) {
+    ElMessage.warning('活动ID无效，无法进入考试成绩页')
+    return
+  }
+
+  router.push({
+    name: 'ExamStudentPapers',
+    params: { id: aid },
+    query: {
+      courseId: String(route.query.courseId || ''),
+      courseTitle: route.query.courseTitle || '',
+      teacherName: route.query.teacherName || '',
+      activityTitle: String(route.query.activityTitle || examDetailRaw.value?.title || '').trim()
+    }
+  })
+}
+
 const startExam = async () => {
+  if (showEndedStudentScoreCard.value) {
+    await loadOwnScore()
+    return
+  }
+
   const aid = Number(activityId.value)
   if (!Number.isFinite(aid)) {
     ElMessage.warning('活动ID无效，无法开始考试')
@@ -429,6 +592,7 @@ const startExam = async () => {
         courseTitle: route.query.courseTitle || '',
         teacherName: route.query.teacherName || '',
         bizId: String(bizId.value || ''),
+        showResult: String(Number(examDetailRaw.value?.showResult) || 0),
         paperId: String(existingPaperId),
         studentPaperId: Number.isFinite(existingStudentPaperId) && existingStudentPaperId > 0
           ? String(existingStudentPaperId)
@@ -484,6 +648,7 @@ const startExam = async () => {
     sessionStorage.setItem(sessionKey, JSON.stringify({
       activityId: aid,
       paperId,
+      showResult: Number(examDetailRaw.value?.showResult) === 1 ? 1 : 0,
       studentPaperId: Number.isFinite(resolvedStudentPaperId) && resolvedStudentPaperId > 0
         ? resolvedStudentPaperId
         : null,
@@ -501,6 +666,7 @@ const startExam = async () => {
         courseTitle: route.query.courseTitle || '',
         teacherName: route.query.teacherName || '',
         bizId: String(bizId.value || ''),
+        showResult: String(Number(examDetailRaw.value?.showResult) || 0),
         paperId: String(paperId),
         studentPaperId: Number.isFinite(resolvedStudentPaperId) && resolvedStudentPaperId > 0
           ? String(resolvedStudentPaperId)
@@ -511,7 +677,7 @@ const startExam = async () => {
       }
     })
   } catch (error) {
-    ElMessage.error('开始考试失败，请稍后重试')
+    ElMessage.error('已达到本次考试最大尝试次数，无法继续作答')
   } finally {
     loading.value = false
   }
@@ -519,6 +685,7 @@ const startExam = async () => {
 
 onMounted(async () => {
   await loadExamInfo()
+  await loadOwnScoreForPanel()
 })
 </script>
 
@@ -611,7 +778,31 @@ onMounted(async () => {
 
 .actions {
   margin-top: 18px;
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.my-score-card {
+  margin-top: 14px;
+  border: 1px solid #cbe5d3;
+  background: linear-gradient(180deg, #f2fbf4 0%, #ffffff 100%);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.my-score-label {
+  font-size: 12px;
+  color: #5f7a66;
+}
+
+.my-score-value {
+  margin-top: 6px;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 700;
+  color: #14532d;
 }
 
 @media (max-width: 768px) {
