@@ -15,11 +15,6 @@ export const activityApi = {
     return request.get(`/activity/getAllById/${id}`)
   },
 
-  // 兼容旧调用
-  getAllById(id) {
-    return this.getAllByCourseId(id)
-  },
-
   // 发布活动信息
   save(data) {
     return request.post('/activity/save', data)

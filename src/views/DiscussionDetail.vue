@@ -51,6 +51,7 @@
           :deleting-comment-id="deletingCommentId"
           :replying-comment-id="replyingToCommentId"
           :reply-draft="replyContent"
+          :liked-comment-ids="likedCommentIdSet"
           :sending-reply="sendingReply"
           :can-delete-reply="canDeleteReply"
           @like="handleCommentLike"
@@ -128,6 +129,8 @@ const deletingCommentId = ref(null)
 const replyContent = ref('')
 const rootReplyContent = ref('')
 const replyingToCommentId = ref(0)
+const postLiked = ref(false)
+const likedCommentIdSet = ref(new Set())
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -136,6 +139,49 @@ const repliesTotal = ref(0)
 const discussionId = route.params.id
 // 用于“作者本人可删除评论”的权限判断。
 const currentUserId = computed(() => Number(userStore.user?.id || 0))
+
+const resolveLikeStorageKey = (kind, id) => {
+  const userId = Number(currentUserId.value)
+  return `discussion-like:${kind}:${userId}:${id}`
+}
+
+const loadPostLikeState = () => {
+  const key = resolveLikeStorageKey('post', discussionId)
+  postLiked.value = localStorage.getItem(key) === '1'
+}
+
+const loadCommentLikeState = (rows = []) => {
+  const userId = Number(currentUserId.value)
+  if (!Number.isFinite(userId) || userId <= 0) {
+    likedCommentIdSet.value = new Set()
+    return
+  }
+
+  const commentIds = new Set()
+  const walk = (list) => {
+    for (const item of list) {
+      const id = Number(item?.id)
+      if (Number.isFinite(id) && id > 0) {
+        commentIds.add(id)
+      }
+      if (Array.isArray(item?.children) && item.children.length > 0) {
+        walk(item.children)
+      }
+    }
+  }
+
+  walk(Array.isArray(rows) ? rows : [])
+
+  const nextSet = new Set()
+  commentIds.forEach((id) => {
+    const key = resolveLikeStorageKey('comment', id)
+    if (localStorage.getItem(key) === '1') {
+      nextSet.add(id)
+    }
+  })
+
+  likedCommentIdSet.value = nextSet
+}
 
 const loadDiscussionDetail = async () => {
   loading.value = true
@@ -168,6 +214,7 @@ const loadReplies = async () => {
     if (response.code === 1) {
       const rows = Array.isArray(response?.data?.rows) ? response.data.rows : []
       replies.value = rows
+      loadCommentLikeState(rows)
 
       repliesTotal.value = Number(response?.data?.total || rows.length)
     } else {
@@ -273,13 +320,27 @@ const clearReplyTarget = () => {
 }
 
 const handlePostLike = async () => {
+  if (postLiked.value) {
+    ElMessage.warning('已经点过赞了')
+    return
+  }
+
   likingPost.value = true
   try {
     const response = await discussionApi.postLike(discussionId)
     if (response?.code === 1) {
       ElMessage.success('点赞成功')
+      postLiked.value = true
+      localStorage.setItem(resolveLikeStorageKey('post', discussionId), '1')
       await loadDiscussionDetail()
     } else {
+      const msg = String(response?.msg || '点赞失败')
+      if (/已点赞|重复|只能.*一次|already/i.test(msg)) {
+        postLiked.value = true
+        localStorage.setItem(resolveLikeStorageKey('post', discussionId), '1')
+        ElMessage.warning('已经点过赞了')
+        return
+      }
       ElMessage.error(response?.msg || '点赞失败')
     }
   } catch (error) {
@@ -295,13 +356,28 @@ const handleCommentLike = async (reply) => {
     return
   }
 
+  const commentId = Number(reply.id)
+  if (likedCommentIdSet.value.has(commentId)) {
+    ElMessage.warning('已经点过赞了')
+    return
+  }
+
   likingCommentId.value = reply.id
   try {
     const response = await discussionApi.commentLike(reply.id)
     if (response?.code === 1) {
       ElMessage.success('评论点赞成功')
+      likedCommentIdSet.value.add(commentId)
+      localStorage.setItem(resolveLikeStorageKey('comment', commentId), '1')
       await loadReplies()
     } else {
+      const msg = String(response?.msg || '评论点赞失败')
+      if (/已点赞|重复|只能.*一次|already/i.test(msg)) {
+        likedCommentIdSet.value.add(commentId)
+        localStorage.setItem(resolveLikeStorageKey('comment', commentId), '1')
+        ElMessage.warning('已经点过赞了')
+        return
+      }
       ElMessage.error(response?.msg || '评论点赞失败')
     }
   } catch (error) {
@@ -362,6 +438,7 @@ const goBack = () => {
 }
 
 onMounted(() => {
+  loadPostLikeState()
   loadDiscussionDetail()
   loadReplies()
 })

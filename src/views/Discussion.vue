@@ -66,6 +66,42 @@
         </el-table-column>
       </el-table>
 
+      <div class="discussion-mobile-list" v-loading="loading">
+        <div
+          v-for="item in displayedDiscussions"
+          :key="item.backendId || item.displayId"
+          class="discussion-mobile-card"
+          @click="viewDiscussion(item)"
+        >
+          <div class="discussion-mobile-title">{{ item.title || '-' }}</div>
+          <div class="discussion-mobile-meta">
+            <span>作者：{{ item.username || '-' }}</span>
+            <span>课程：{{ item.courseName || '-' }}</span>
+          </div>
+          <div class="discussion-mobile-content">{{ item.content || '-' }}</div>
+          <div class="discussion-mobile-footer">
+            <span>回复 {{ item.commentCount || 0 }}</span>
+            <span>点赞 {{ item.likeCount || 0 }}</span>
+            <span>{{ item.createTime || '-' }}</span>
+          </div>
+          <div v-if="canManageDiscussion" class="discussion-mobile-actions">
+            <el-button
+              type="danger"
+              size="small"
+              :loading="deletingDiscussionId === item.backendId"
+              @click.stop="handleDeleteDiscussion(item.backendId)"
+            >
+              删除
+            </el-button>
+          </div>
+        </div>
+
+        <el-empty
+          v-if="!loading && displayedDiscussions.length === 0"
+          description="暂无讨论数据"
+        />
+      </div>
+
       <el-pagination
         :current-page="currentPage"
         :page-size="pageSize"
@@ -555,6 +591,70 @@ onMounted(() => {
 .discussion-container :deep(.el-textarea__inner:focus) {
   border-color: var(--theme-primary);
   box-shadow: 0 0 0 2px rgba(var(--theme-primary-rgb), 0.1);
+}
+
+.discussion-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .discussion-container :deep(.el-table) {
+    display: none;
+  }
+
+  .discussion-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .discussion-mobile-card {
+    border: 1px solid #e4ecf7;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+  }
+
+  .discussion-mobile-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1f2d3d;
+  }
+
+  .discussion-mobile-meta {
+    margin-top: 6px;
+    color: #5f7285;
+    font-size: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .discussion-mobile-content {
+    margin-top: 8px;
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .discussion-mobile-footer {
+    margin-top: 10px;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 8px;
+    color: #6b7d90;
+    font-size: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .discussion-mobile-actions {
+    margin-top: 8px;
+  }
 }
 </style>
 

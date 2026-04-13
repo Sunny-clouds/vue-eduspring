@@ -57,6 +57,37 @@
         </el-table-column>
       </el-table>
 
+      <div class="question-mobile-list" v-loading="loading">
+        <div
+          v-for="item in pagedQuestions"
+          :key="item.id || item.displayId"
+          class="question-mobile-card"
+        >
+          <div class="question-mobile-head">
+            <span class="question-mobile-id">#{{ item.displayId }}</span>
+            <span class="question-mobile-type">{{ formatTypeText(item.type) }}</span>
+          </div>
+          <div class="question-mobile-title">{{ item.title || '-' }}</div>
+          <div class="question-mobile-content">{{ item.content || '-' }}</div>
+          <div class="question-mobile-meta">
+            <span>答案：{{ formatAnswerText(item) }}</span>
+            <span>分值：{{ item.score ?? '-' }}</span>
+            <span>难度：{{ formatDifficultyText(item.difficulty) }}</span>
+            <span>创建人：{{ item.nickname || '-' }}</span>
+          </div>
+          <div class="question-mobile-time">更新：{{ item.updateTime || '-' }}</div>
+          <div class="question-mobile-actions">
+            <el-button type="primary" size="small" @click="openEditDialog(item)">编辑</el-button>
+            <el-button type="danger" size="small" @click="handleDelete(item)">删除</el-button>
+          </div>
+        </div>
+
+        <el-empty
+          v-if="!loading && pagedQuestions.length === 0"
+          description="暂无题目"
+        />
+      </div>
+
       <div class="pagination-wrap">
         <el-pagination
           background
@@ -758,5 +789,139 @@ onMounted(async () => {
 .pagination-wrap {
   margin-top: 16px;
   text-align: right;
+}
+
+.question-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .question-bank-page {
+    padding: 8px 0 14px;
+  }
+
+  .card-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card-header .el-button {
+    width: 100%;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .search-input,
+  .course-filter {
+    width: 100%;
+  }
+
+  .toolbar .el-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .question-bank-page :deep(.el-table__header-wrapper),
+  .question-bank-page :deep(.el-table__body-wrapper) {
+    overflow-x: auto;
+  }
+
+  .question-bank-page :deep(.el-table) {
+    display: none;
+  }
+
+  .question-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .question-mobile-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  }
+
+  .question-mobile-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .question-mobile-id {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+  }
+
+  .question-mobile-type {
+    font-size: 12px;
+    color: #0f766e;
+    background: #ccfbf1;
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .question-mobile-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 6px;
+  }
+
+  .question-mobile-content {
+    font-size: 13px;
+    color: #334155;
+    line-height: 1.5;
+    margin-bottom: 8px;
+    word-break: break-word;
+  }
+
+  .question-mobile-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 8px;
+  }
+
+  .question-mobile-time {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 10px;
+  }
+
+  .question-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .question-mobile-actions .el-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .pagination-wrap {
+    text-align: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .title {
+    font-size: 18px;
+  }
+
+  .question-bank-card :deep(.el-card__body) {
+    padding: 12px;
+  }
 }
 </style>

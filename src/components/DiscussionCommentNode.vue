@@ -21,7 +21,7 @@
 
         <el-button
           v-if="comment.id !== undefined && comment.id !== null"
-          class="comment-action comment-like-action"
+          :class="['comment-action', 'comment-like-action', { 'is-liked': isCommentLiked }]"
           type="primary"
           link
           :loading="likingCommentId === comment.id"
@@ -109,6 +109,7 @@
           :deleting-comment-id="deletingCommentId"
           :replying-comment-id="replyingCommentId"
           :reply-draft="replyDraft"
+          :liked-comment-ids="likedCommentIds"
           :sending-reply="sendingReply"
           :can-delete-reply="canDeleteReply"
           @like="$emit('like', $event)"
@@ -156,6 +157,10 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  likedCommentIds: {
+    type: Object,
+    default: null
+  },
   sendingReply: {
     type: Boolean,
     default: false
@@ -184,6 +189,13 @@ const parentUsername = computed(() => props.parentUsername)
 const nextDepth = computed(() => (props.depth > 0 ? 1 : props.depth + 1))
 const isReplyingCurrent = computed(() => Number(props.replyingCommentId) === Number(props.comment?.id))
 const showToggle = computed(() => hasChildren.value && props.depth === 0)
+const isCommentLiked = computed(() => {
+  if (!props.likedCommentIds || typeof props.likedCommentIds.has !== 'function') {
+    return false
+  }
+  const commentId = Number(props.comment?.id)
+  return Number.isFinite(commentId) && props.likedCommentIds.has(commentId)
+})
 </script>
 
 <style scoped>
@@ -259,6 +271,14 @@ const showToggle = computed(() => hasChildren.value && props.depth === 0)
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.comment-like-action.is-liked {
+  color: #f56c6c;
+}
+
+.comment-like-action.is-liked:hover {
+  color: #f56c6c;
 }
 
 .like-heart-icon {

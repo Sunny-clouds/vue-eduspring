@@ -67,27 +67,6 @@ export const courseApi = {
   // 退课（依赖于studentCourse模块）
   dropCourse(id) {
     return request.delete(`/studentCourse/delByUserName/${id}`)
-  },
-
-  // 兼容旧调用命名
-  getCourseByTitle(title, pageNum = 1, pageSize = 10) {
-    return request.get('/course/getByTitle', { params: { title, pageNum, pageSize } })
-  },
-
-  addCourse(data) {
-    return request.post('/course/save', data)
-  },
-
-  deleteCourse(id) {
-    return request.delete(`/course/del/${id}`)
-  },
-
-  getCourseResources(courseId) {
-    return request.get(`/courseResource/getCourseResourceById/${courseId}`)
-  },
-
-  deleteResource(id) {
-    return request.delete(`/courseResource/del/${id}`)
   }
 }
 

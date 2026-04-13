@@ -122,19 +122,29 @@
           </div>
         </el-tab-pane>
       </el-tabs>
+
+      <div class="mobile-logout-wrap">
+        <el-button class="mobile-logout-btn" type="danger" plain @click="handleProfileLogout">
+          <el-icon><SwitchButton /></el-icon>
+          <span>退出登录</span>
+        </el-button>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup name="ProfilePage">
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { uploadApi } from '@/api/upload'
 import { scoreApi } from '@/api/score'
 import { studentCourseApi } from '@/api/studentCourse'
 import { ElMessage } from 'element-plus'
+import { SwitchButton } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
+const router = useRouter()
 const isStudent = computed(() => userStore.isStudent)
 
 const activeTab = ref('basic')
@@ -446,6 +456,12 @@ onMounted(() => {
   loadUserInfo()
   loadStatistics()
 })
+
+const handleProfileLogout = () => {
+  userStore.logout()
+  ElMessage.success('已登出')
+  router.push('/login')
+}
 </script>
 
 <style scoped>
@@ -653,6 +669,65 @@ onMounted(() => {
   font-weight: 800;
   color: white;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-logout-wrap {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .profile-container {
+    padding: 16px 14px;
+  }
+
+  .profile-container :deep(.el-card__header) {
+    padding: 16px;
+  }
+
+  .title {
+    font-size: 18px;
+  }
+
+  .statistics {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .stat-item {
+    padding: 20px 16px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .mobile-logout-wrap {
+    display: flex;
+    justify-content: center;
+    padding-top: 12px;
+  }
+
+  .mobile-logout-btn {
+    width: 100%;
+    max-width: 320px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 560px) {
+  .profile-container {
+    padding: 12px 10px;
+  }
+
+  .avatar-uploader-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-statistics-empty {
+    padding: 16px 14px;
+  }
 }
 </style>
 

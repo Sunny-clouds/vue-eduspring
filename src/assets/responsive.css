@@ -1,0 +1,277 @@
+/* Global mobile-first responsive adaptations for all major pages */
+
+@media (max-width: 992px) {
+  body {
+    overflow: auto;
+  }
+
+  .app {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
+  .nav-container {
+    height: 62px;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .nav-logo {
+    margin-right: 12px;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .nav-menu {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-menu .el-menu--horizontal {
+    flex-wrap: nowrap;
+  }
+
+  .nav-menu :is(.el-menu-item, .el-sub-menu__title) {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 12px !important;
+  }
+
+  .app-container {
+    height: auto;
+    min-height: calc(100vh - 62px);
+  }
+
+  .admin-content {
+    padding: 12px;
+  }
+
+  .admin-dashboard,
+  .home-container,
+  .courses-container,
+  .discussion-container,
+  .discussion-detail-container,
+  .scores-container,
+  .users-container,
+  .profile-container,
+  .question-bank-page,
+  .course-learn-container,
+  .exam-info-page,
+  .exam-student-paper-page,
+  .exam-taking-page {
+    padding: 14px !important;
+  }
+
+  .card-header,
+  .page-header,
+  .exam-header,
+  .learn-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .filter-bar,
+  .toolbar,
+  .resource-toolbar,
+  .actions,
+  .activity-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filter-bar .el-input,
+  .toolbar .el-input,
+  .toolbar .el-select,
+  .actions .el-button {
+    min-width: 0;
+    flex: 1 1 220px;
+  }
+
+  .courses-container .el-table__header-wrapper,
+  .courses-container .el-table__body-wrapper,
+  .discussion-container .el-table__header-wrapper,
+  .discussion-container .el-table__body-wrapper,
+  .scores-container .el-table__header-wrapper,
+  .scores-container .el-table__body-wrapper,
+  .users-container .el-table__header-wrapper,
+  .users-container .el-table__body-wrapper,
+  .question-bank-page .el-table__header-wrapper,
+  .question-bank-page .el-table__body-wrapper,
+  .exam-student-paper-page .el-table__header-wrapper,
+  .exam-student-paper-page .el-table__body-wrapper,
+  .course-learn-container .el-table__header-wrapper,
+  .course-learn-container .el-table__body-wrapper {
+    overflow-x: auto;
+  }
+
+  .el-pagination {
+    justify-content: center;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    margin: 8vh auto 0 !important;
+  }
+
+  .el-dialog__body {
+    max-height: 70vh;
+    overflow: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-sidebar {
+    width: 56px;
+  }
+
+  .admin-layout.collapsed .admin-sidebar {
+    width: 56px;
+  }
+
+  .sidebar-menu :is(.el-menu-item, .el-sub-menu__title) {
+    height: 46px;
+  }
+
+  .admin-topbar {
+    padding-right: 10px;
+  }
+
+  .tags-view {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .login-card .el-card__body,
+  .register-card .el-card__body {
+    padding: 26px 20px;
+  }
+
+  .login-title,
+  .register-title {
+    font-size: 30px;
+  }
+
+  .admin-grid,
+  .metrics-grid,
+  .exam-status-panel,
+  .member-metrics {
+    grid-template-columns: 1fr !important;
+  }
+
+  .home-container .grid-container {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+    padding: 0;
+  }
+
+  .profile-container .el-tabs__item {
+    padding: 0 10px;
+  }
+
+  .course-learn-container .detail-categories {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-header {
+    border-bottom-width: 0;
+  }
+
+  .nav-container {
+    height: 56px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .nav-logo {
+    font-size: 16px;
+    margin-right: 8px;
+  }
+
+  .nav-user {
+    gap: 6px;
+  }
+
+  .nav-user-avatar {
+    display: none;
+  }
+
+  .nav-logout {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+  }
+
+  .home-container,
+  .courses-container,
+  .discussion-container,
+  .discussion-detail-container,
+  .scores-container,
+  .users-container,
+  .profile-container,
+  .question-bank-page,
+  .course-learn-container,
+  .exam-info-page,
+  .exam-student-paper-page,
+  .exam-taking-page,
+  .admin-dashboard {
+    padding: 10px !important;
+  }
+
+  .card-header,
+  .page-header,
+  .exam-header,
+  .learn-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .card-header .el-button,
+  .page-header .el-button,
+  .exam-header .el-button,
+  .filter-bar .el-button,
+  .toolbar .el-button,
+  .actions .el-button,
+  .resource-toolbar .el-button,
+  .activity-toolbar .el-button {
+    width: 100%;
+  }
+
+  .filter-bar .el-input,
+  .toolbar .el-input,
+  .toolbar .el-select,
+  .actions .el-button {
+    flex: 1 1 100%;
+  }
+
+  .el-card {
+    border-radius: 12px;
+  }
+
+  .el-card__body {
+    padding: 12px !important;
+  }
+
+  .el-form-item__label {
+    padding-bottom: 4px;
+  }
+}

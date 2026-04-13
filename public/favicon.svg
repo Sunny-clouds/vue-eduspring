@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="EduSpring icon">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0ea5a4"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="book" x1="20" y1="22" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#dbeafe" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bg)"/>
+
+  <path d="M20 22h10c4.6 0 8 1.8 10 5 2-3.2 5.4-5 10-5h0v20h0c-4.6 0-8 1.8-10 5-2-3.2-5.4-5-10-5h-10z" fill="url(#book)"/>
+
+  <path d="M22 28h8.2c3.2 0 5.3 1 7 3.2V45c-1.9-2.1-4-3-7-3H22z" fill="#f8fafc" opacity="0.95"/>
+  <path d="M42 31.2c1.7-2.2 3.8-3.2 7-3.2h1v14h-1c-3 0-5.1.9-7 3z" fill="#e0e7ff" opacity="0.92"/>
+
+  <path d="M26 34h7M26 38h8M26 42h6" stroke="#60a5fa" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M39.4 29.6v16" stroke="#93c5fd" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

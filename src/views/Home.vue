@@ -311,6 +311,55 @@ const goTo = (path) => {
 :deep(.el-descriptions__item:hover) {
   background-color: var(--theme-surface-soft);
 }
+
+@media (max-width: 768px) {
+  .home-container {
+    padding: 16px 14px;
+  }
+
+  .header-section {
+    margin-bottom: 24px;
+    padding: 26px 16px;
+    border-radius: 14px;
+  }
+
+  .header-section h1 {
+    font-size: 30px;
+  }
+
+  .grid-container {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 0;
+  }
+
+  .card-content {
+    padding: 26px 16px;
+  }
+}
+
+@media (max-width: 560px) {
+  .home-container {
+    padding: 12px 10px;
+  }
+
+  .header-section h1 {
+    font-size: 24px;
+  }
+
+  .header-section p {
+    font-size: 13px;
+  }
+
+  :deep(.el-card__header) {
+    padding: 14px 16px;
+    font-size: 16px;
+  }
+
+  :deep(.el-descriptions__cell) {
+    padding: 10px 12px;
+  }
+}
 </style>
 
 

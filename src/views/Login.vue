@@ -1,52 +1,82 @@
 ﻿<template>
-  <div class="login-container">
-    <el-card class="login-card">
-      <h1 class="login-title">EduSpring 教育学习平台</h1>
-      <p class="login-subtitle">欢迎登录</p>
+  <div class="login-page">
+    <div class="login-shell">
+      <section class="panel-form">
+        <div class="brand-row">
+          <div class="brand-badge">ES</div>
+          <div class="brand-copy">
+            <h1>EduSpring</h1>
+            <p>Smart Learning Campus</p>
+          </div>
+        </div>
 
-      <el-form
-        ref="loginFormRef"
-        :model="loginForm"
-        :rules="loginRules"
-        @keyup.enter="handleLogin"
-      >
-        <el-form-item prop="username">
-          <el-input
-            v-model="loginForm.username"
-            placeholder="请输入用户名"
-            prefix-icon="User"
-            clearable
-          />
-        </el-form-item>
+        <div class="form-area">
+          <header class="form-header">
+            <h2>欢迎回来</h2>
+            <p>登录后继续你的学习任务与课堂互动。</p>
+          </header>
 
-        <el-form-item prop="password">
-          <el-input
-            v-model="loginForm.password"
-            placeholder="请输入密码"
-            prefix-icon="Lock"
-            type="password"
-            show-password
-            clearable
-          />
-        </el-form-item>
-
-        <el-form-item>
-          <el-button
-            type="primary"
-            style="width: 100%"
-            :loading="loginLoading"
-            @click="handleLogin"
+          <el-form
+            ref="loginFormRef"
+            class="login-form"
+            :model="loginForm"
+            :rules="loginRules"
+            @keyup.enter="handleLogin"
           >
-            {{ loginLoading ? '登录中...' : '登录' }}
-          </el-button>
-        </el-form-item>
-      </el-form>
+            <el-form-item prop="username">
+              <el-input
+                v-model="loginForm.username"
+                placeholder="请输入用户名"
+                prefix-icon="User"
+                clearable
+              />
+            </el-form-item>
 
-      <div class="form-footer">
-        <span>没有账户？</span>
-        <el-link type="primary" @click="switchToRegister">立即注册</el-link>
-      </div>
-    </el-card>
+            <el-form-item prop="password">
+              <el-input
+                v-model="loginForm.password"
+                placeholder="请输入密码"
+                prefix-icon="Lock"
+                type="password"
+                show-password
+                clearable
+              />
+            </el-form-item>
+
+            <el-form-item class="submit-row">
+              <el-button
+                class="submit-btn"
+                type="primary"
+                :loading="loginLoading"
+                @click="handleLogin"
+              >
+                {{ loginLoading ? '登录中...' : '立即登录' }}
+              </el-button>
+            </el-form-item>
+          </el-form>
+
+          <div class="register-tip">
+            <span>没有账户?</span>
+            <el-link type="primary" @click="switchToRegister">立即注册</el-link>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-visual" aria-hidden="true">
+        <div class="visual-overlay"></div>
+        <div class="visual-content">
+          <p class="pill">10,000+ 学员正在使用</p>
+          <h3>
+            让每一次登录
+            <br>
+            都成为成长的起点
+          </h3>
+          <p class="visual-sub">
+            从课程学习、讨论互动到考试评估，统一在一个清晰高效的学习空间中完成。
+          </p>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -102,31 +132,215 @@ const switchToRegister = () => {
 </script>
 
 <style scoped>
-.login-container {
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+.login-page {
+  --brand-a: #0f766e;
+  --brand-b: #0ea5a4;
+  --brand-c: #f59e0b;
+  --text-strong: #0f172a;
+  --text-soft: #64748b;
+
+  min-height: 100vh;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  width: 100%;
-  background: #ffffff;
-  padding: 20px;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(15, 118, 110, 0.2) 0, transparent 36%),
+    radial-gradient(circle at 88% 84%, rgba(245, 158, 11, 0.22) 0, transparent 34%),
+    linear-gradient(145deg, #f8fafc 0%, #f1f5f9 55%, #ecfeff 100%);
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
 }
 
-.login-card {
+.login-shell {
   width: 100%;
-  max-width: 420px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  border-radius: 20px;
-  border: none;
-  background: white;
-  animation: slideUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 1180px;
+  min-height: 700px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr);
+  border-radius: 28px;
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.14);
 }
 
-@keyframes slideUp {
+.panel-form {
+  padding: 36px 44px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.84));
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
+  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.35);
+}
+
+.brand-copy h1 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-strong);
+  line-height: 1.1;
+}
+
+.brand-copy p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.form-area {
+  width: 100%;
+  max-width: 460px;
+  margin: 20px auto 0;
+}
+
+.form-header h2 {
+  margin: 0;
+  font-size: 38px;
+  color: var(--text-strong);
+  letter-spacing: -0.02em;
+}
+
+.form-header p {
+  margin: 10px 0 30px;
+  color: var(--text-soft);
+  font-size: 15px;
+}
+
+.login-form {
+  animation: fade-up 0.55s ease-out;
+}
+
+.submit-row {
+  margin-top: 4px;
+}
+
+.submit-btn {
+  width: 100%;
+  height: 46px;
+  border: none;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--brand-a), var(--brand-b)) !important;
+  box-shadow: 0 14px 30px rgba(14, 165, 164, 0.34);
+}
+
+.register-tip {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-soft);
+}
+
+.register-tip span {
+  margin-right: 6px;
+}
+
+.register-tip :deep(.el-link) {
+  font-weight: 700;
+  color: var(--brand-a);
+}
+
+.panel-visual {
+  position: relative;
+  background:
+    linear-gradient(130deg, rgba(13, 148, 136, 0.38), rgba(6, 95, 70, 0.48)),
+    url('https://images.unsplash.com/photo-1513258496099-48168024aec0?auto=format&fit=crop&w=1200&q=80') center / cover;
+}
+
+.visual-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 74% 22%, rgba(251, 191, 36, 0.18), transparent 42%),
+    radial-gradient(circle at 24% 74%, rgba(255, 255, 255, 0.11), transparent 44%);
+}
+
+.visual-content {
+  position: absolute;
+  left: 48px;
+  right: 48px;
+  bottom: 56px;
+  color: #f8fafc;
+}
+
+.pill {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+.visual-content h3 {
+  margin: 0;
+  font-size: 46px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.visual-sub {
+  margin: 16px 0 0;
+  max-width: 420px;
+  color: rgba(241, 245, 249, 0.95);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 20px;
+}
+
+:deep(.el-input__wrapper) {
+  border-radius: 14px;
+  min-height: 46px;
+  border: 1px solid #dbe3ee;
+  background: #f8fafc;
+  box-shadow: none;
+  transition: all 0.22s ease;
+}
+
+:deep(.el-input__wrapper:hover) {
+  border-color: #9fb4cc;
+  background: #ffffff;
+}
+
+:deep(.el-input.is-focus .el-input__wrapper) {
+  border-color: var(--brand-b);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(14, 165, 164, 0.16);
+}
+
+@keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(40px);
+    transform: translateY(22px);
   }
   to {
     opacity: 1;
@@ -134,90 +348,39 @@ const switchToRegister = () => {
   }
 }
 
-.login-card :deep(.el-card__body) {
-  padding: 50px 35px;
+@media (max-width: 768px) {
+  .login-page {
+    padding: 14px;
+  }
+
+  .login-shell {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    border-radius: 20px;
+  }
+
+  .panel-form {
+    padding: 26px 20px;
+  }
+
+  .form-area {
+    margin-top: 16px;
+    max-width: 100%;
+  }
+
+  .form-header h2 {
+    font-size: 30px;
+  }
+
+  .panel-visual {
+    display: none;
+  }
 }
 
-.login-title {
-  text-align: center;
-  background: #87ceeb;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 8px;
-  font-size: 36px;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
-.login-subtitle {
-  text-align: center;
-  color: #909399;
-  margin-bottom: 35px;
-  font-size: 15px;
-  letter-spacing: 0.5px;
-  font-weight: 500;
-}
-
-.form-footer {
-  text-align: center;
-  font-size: 14px;
-  color: #666;
-  margin-top: 25px;
-  transition: all 0.3s ease;
-}
-
-.form-footer span {
-  margin-right: 8px;
-  font-weight: 500;
-}
-
-.form-footer :deep(.el-link) {
-  color: var(--theme-primary);
-  font-weight: 700;
-  transition: all 0.3s ease;
-  letter-spacing: 0.3px;
-}
-
-.form-footer :deep(.el-link:hover) {
-  color: var(--theme-secondary);
-  text-decoration: none;
-}
-
-:deep(.el-form-item) {
-  margin-bottom: 24px;
-  transition: all 0.3s ease;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: 10px;
-  transition: all 0.3s ease;
-  border-color: #e0e0e0;
-  background: #fcfcfc;
-}
-
-:deep(.el-input__wrapper:hover) {
-  border-color: var(--theme-primary);
-  background: white;
-  box-shadow: 0 0 0 2px rgba(var(--theme-primary-rgb), 0.08);
-}
-
-:deep(.el-input.is-focus .el-input__wrapper) {
-  border-color: var(--theme-primary);
-  background: white;
-  box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb), 0.15);
-}
-
-:deep(.el-input__prefix) {
-  display: flex;
-  align-items: center;
-  color: var(--theme-primary);
-  font-weight: 600;
-  transition: color 0.3s ease;
-}
-
-:deep(.el-input.is-focus .el-input__prefix) {
-  color: var(--theme-secondary);
+@media (max-width: 560px) {
+  .form-header h2 {
+    font-size: 26px;
+  }
 }
 
 </style>

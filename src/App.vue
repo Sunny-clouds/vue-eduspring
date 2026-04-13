@@ -2,19 +2,23 @@
   <div class="app">
     <template v-if="isAuthPage">
       <div class="auth-container">
-        <router-view />
+        <router-view v-slot="{ Component, route: currentRoute }">
+          <transition name="auth-switch" mode="out-in" appear>
+            <component :is="Component" :key="String(currentRoute.name || currentRoute.path)" />
+          </transition>
+        </router-view>
       </div>
     </template>
 
     <template v-else-if="isAdminLayout">
-      <div class="admin-layout" :class="{ collapsed: isSidebarCollapsed }">
-        <aside class="admin-sidebar">
+      <div class="admin-layout" :class="{ collapsed: actualSidebarCollapsed, 'mobile-admin': isMobileAdmin }">
+        <aside v-if="!isMobileAdmin" class="admin-sidebar">
           <div class="sidebar-logo">EduSpring Admin</div>
           <el-menu
             router
             :default-active="activeMenu"
             class="sidebar-menu"
-            :collapse="isSidebarCollapsed"
+            :collapse="actualSidebarCollapsed"
             :collapse-transition="false"
             background-color="#304156"
             text-color="#bfcbd9"
@@ -37,7 +41,7 @@
               <template #title>讨论管理</template>
             </el-menu-item>
             <el-menu-item index="/question-bank">
-              <el-icon><Reading /></el-icon>
+              <el-icon><Collection /></el-icon>
               <template #title>题库管理</template>
             </el-menu-item>
             <el-menu-item index="/profile">
@@ -97,27 +101,83 @@
             </router-view>
           </main>
         </section>
+
+        <nav v-if="isMobileAdmin" class="admin-mobile-bottom-nav" aria-label="管理员底部导航">
+          <button class="admin-mobile-nav-item" :class="{ 'is-active': activeMenu === '/admin' }" @click="router.push('/admin')">
+            <el-icon><House /></el-icon>
+          </button>
+          <button class="admin-mobile-nav-item" :class="{ 'is-active': activeMenu === '/users' }" @click="router.push('/users')">
+            <el-icon><User /></el-icon>
+          </button>
+          <button class="admin-mobile-nav-item" :class="{ 'is-active': activeMenu === '/courses' }" @click="router.push('/courses')">
+            <el-icon><Reading /></el-icon>
+          </button>
+          <button class="admin-mobile-nav-item" :class="{ 'is-active': activeMenu === '/discussion' }" @click="router.push('/discussion')">
+            <el-icon><ChatDotRound /></el-icon>
+          </button>
+          <button class="admin-mobile-nav-item" :class="{ 'is-active': activeMenu === '/question-bank' }" @click="router.push('/question-bank')">
+            <el-icon><Collection /></el-icon>
+          </button>
+          <button class="admin-mobile-nav-item" :class="{ 'is-active': activeMenu === '/profile' }" @click="router.push('/profile')">
+            <el-icon><Setting /></el-icon>
+          </button>
+        </nav>
       </div>
     </template>
 
     <template v-else>
       <el-header class="app-header">
         <div class="nav-container">
-          <div class="nav-logo">EduSpring</div>
-          <el-menu
-            router
-            mode="horizontal"
-            :default-active="activeMenu"
-            class="nav-menu"
+          <template v-if="!isMobileMainNav">
+            <div class="nav-logo">EduSpring</div>
+            <el-menu
+              router
+              mode="horizontal"
+              :default-active="activeMenu"
+              :ellipsis="false"
+              class="nav-menu"
+            >
+              <el-menu-item index="/home">首页</el-menu-item>
+              <el-menu-item index="/courses">课程</el-menu-item>
+              <el-menu-item index="/scores">成绩</el-menu-item>
+              <el-menu-item index="/discussion">讨论</el-menu-item>
+              <el-menu-item v-if="userStore.isTeacher" index="/question-bank">题库</el-menu-item>
+              <el-menu-item index="/profile">个人中心</el-menu-item>
+            </el-menu>
+          </template>
+
+          <nav
+            v-else
+            class="main-mobile-bottom-nav"
+            :class="{ 'teacher-nav': userStore.isTeacher }"
+            aria-label="学习端底部导航"
           >
-            <el-menu-item index="/home">首页</el-menu-item>
-            <el-menu-item index="/courses">课程</el-menu-item>
-            <el-menu-item index="/scores">成绩</el-menu-item>
-            <el-menu-item index="/discussion">讨论</el-menu-item>
-            <el-menu-item v-if="userStore.isTeacher" index="/question-bank">题库</el-menu-item>
-            <el-menu-item index="/profile">个人中心</el-menu-item>
-          </el-menu>
-          <div class="nav-user">
+            <button class="main-mobile-nav-item" :class="{ 'is-active': activeMenu === '/home' }" @click="router.push('/home')">
+              <el-icon><House /></el-icon>
+            </button>
+            <button class="main-mobile-nav-item" :class="{ 'is-active': activeMenu === '/courses' }" @click="router.push('/courses')">
+              <el-icon><Reading /></el-icon>
+            </button>
+            <button class="main-mobile-nav-item" :class="{ 'is-active': activeMenu === '/scores' }" @click="router.push('/scores')">
+              <el-icon><DataAnalysis /></el-icon>
+            </button>
+            <button class="main-mobile-nav-item" :class="{ 'is-active': activeMenu === '/discussion' }" @click="router.push('/discussion')">
+              <el-icon><ChatDotRound /></el-icon>
+            </button>
+            <button
+              v-if="userStore.isTeacher"
+              class="main-mobile-nav-item"
+              :class="{ 'is-active': activeMenu === '/question-bank' }"
+              @click="router.push('/question-bank')"
+            >
+              <el-icon><Collection /></el-icon>
+            </button>
+            <button class="main-mobile-nav-item" :class="{ 'is-active': activeMenu === '/profile' }" @click="router.push('/profile')">
+              <el-icon><Setting /></el-icon>
+            </button>
+          </nav>
+
+          <div v-if="!isMobileMainNav" class="nav-user">
             <el-avatar :size="36" :src="userStore.user?.avatar || ''" class="nav-user-avatar">
               {{ avatarFallback }}
             </el-avatar>
@@ -147,7 +207,7 @@
 </template>
 
 <script setup>
-import { onMounted, computed, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
@@ -159,7 +219,9 @@ import {
   User,
   Reading,
   ChatDotRound,
-  Setting
+  Setting,
+  DataAnalysis,
+  Collection
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -167,9 +229,47 @@ const route = useRoute()
 const userStore = useUserStore()
 
 const isSidebarCollapsed = ref(false)
+const isMobileAdmin = ref(false)
+const isMobileMainNav = ref(false)
+let resizeRafId = 0
+
+const syncAdminMobileState = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+  const nextMobileAdmin = window.innerWidth <= 992
+  const nextMobileMainNav = window.innerWidth <= 768
+
+  if (isMobileAdmin.value !== nextMobileAdmin) {
+    isMobileAdmin.value = nextMobileAdmin
+  }
+  if (isMobileMainNav.value !== nextMobileMainNav) {
+    isMobileMainNav.value = nextMobileMainNav
+  }
+}
+
+const handleResize = () => {
+  if (typeof window === 'undefined' || resizeRafId) {
+    return
+  }
+  resizeRafId = window.requestAnimationFrame(() => {
+    resizeRafId = 0
+    syncAdminMobileState()
+  })
+}
 
 onMounted(() => {
   userStore.initUser()
+  syncAdminMobileState()
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  if (typeof window !== 'undefined' && resizeRafId) {
+    window.cancelAnimationFrame(resizeRafId)
+    resizeRafId = 0
+  }
 })
 
 const isAuthPath = (path) => ['/login', '/register'].includes(path)
@@ -180,6 +280,10 @@ const isAuthPage = computed(() => {
 
 const isAdminLayout = computed(() => {
   return userStore.isLoggedIn && userStore.isAdmin && !isAuthPage.value
+})
+
+const actualSidebarCollapsed = computed(() => {
+  return isSidebarCollapsed.value || isMobileAdmin.value
 })
 
 const activeMenu = computed(() => {
@@ -477,10 +581,15 @@ body {
   flex-shrink: 0;
 }
 
+.admin-mobile-bottom-nav {
+  display: none;
+}
+
 .app-header {
   background: #2e5a6f;
   border-bottom: 1px solid #3f7188;
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+  padding: 0;
 }
 
 .nav-container {
@@ -492,6 +601,7 @@ body {
   height: 70px;
   padding: 0 30px;
   width: 100%;
+  min-width: 0;
 }
 
 .nav-logo {
@@ -505,14 +615,19 @@ body {
 
 .nav-menu {
   flex: 1;
+  min-width: 0;
   border: none !important;
   background-color: transparent;
   --el-menu-text-color: #ffffff;
   --el-menu-hover-text-color: #ffffff;
   --el-menu-active-color: #ffffff;
+  --el-menu-hover-bg-color: rgba(135, 206, 235, 0.18);
 }
 
 .nav-menu :deep(.el-menu-item) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none !important;
   border-radius: 999px;
   transition: all 0.25s ease;
@@ -522,15 +637,26 @@ body {
   line-height: 42px;
 }
 
+.nav-menu :deep(.el-menu-item:hover),
+.nav-menu :deep(.el-menu-item:focus),
+.nav-menu :deep(.el-menu-item.is-focus),
+.nav-menu :deep(.el-menu--horizontal > .el-menu-item:not(.is-disabled):focus) {
+  color: #ffffff !important;
+  background: rgba(135, 206, 235, 0.18) !important;
+  outline: none;
+}
+
 .nav-menu :deep(.el-menu-item.is-active) {
-  color: #fff;
+  color: #fff !important;
   background: #87ceeb !important;
+  border-bottom: none !important;
 }
 
 .nav-user {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .nav-user-avatar {
@@ -593,6 +719,10 @@ body {
   opacity: 1;
 }
 
+.main-mobile-bottom-nav {
+  display: none;
+}
+
 .app-container {
   height: calc(100% - 70px);
   overflow: auto;
@@ -608,6 +738,20 @@ body {
 .route-fade-leave-to {
   opacity: 0;
   transform: translateY(4px);
+}
+
+.auth-switch-enter-active,
+.auth-switch-appear-active,
+.auth-switch-leave-active {
+  transition: opacity 0.32s ease, transform 0.32s ease, filter 0.32s ease;
+}
+
+.auth-switch-enter-from,
+.auth-switch-appear-from,
+.auth-switch-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.992);
+  filter: blur(2px);
 }
 
 @keyframes adminLoginEnter {
@@ -672,6 +816,190 @@ body {
 
   .nav-user-meta {
     display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    position: fixed;
+    left: 0;
+    right: 0;
+    width: 100vw;
+    bottom: 0;
+    top: auto;
+    z-index: 70;
+    border-top: 1px solid #3f7188;
+    border-bottom: none;
+    box-shadow: 0 -8px 20px rgba(15, 23, 42, 0.18);
+    padding: 0 !important;
+  }
+
+  .app-container {
+    height: 100%;
+    padding-bottom: 58px;
+  }
+
+  .nav-container {
+    height: 58px;
+    gap: 0;
+    width: 100vw;
+    max-width: none;
+    padding: 0 !important;
+    margin: 0;
+    justify-content: center;
+  }
+
+  .nav-logo,
+  .nav-user {
+    display: none;
+  }
+
+  .nav-menu {
+    width: 100vw;
+    overflow: visible;
+    margin: 0 !important;
+  }
+
+  .nav-menu :deep(.el-menu--horizontal) {
+    width: 100vw;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    border-bottom: none;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .nav-menu :deep(.el-menu-item) {
+    padding: 0 12px !important;
+  }
+
+  .main-mobile-bottom-nav {
+    width: 100vw;
+    height: 58px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    background: #2e5a6f;
+    margin: 0;
+    padding: 0;
+  }
+
+  .main-mobile-bottom-nav.teacher-nav {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .main-mobile-nav-item {
+    border: none;
+    background: transparent;
+    color: #d8e8f2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .main-mobile-nav-item .el-icon {
+    font-size: 20px;
+  }
+
+  .main-mobile-nav-item.is-active {
+    color: #ffffff;
+    background: rgba(135, 206, 235, 0.2);
+  }
+
+  .admin-layout {
+    height: 100%;
+  }
+
+  .admin-mobile-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 60px;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    background: #304156;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 -8px 20px rgba(15, 23, 42, 0.18);
+    z-index: 90;
+  }
+
+  .admin-mobile-nav-item {
+    border: none;
+    background: transparent;
+    color: #bfcbd9;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    min-width: 0;
+  }
+
+  .admin-mobile-nav-item .el-icon {
+    font-size: 20px;
+  }
+
+  .admin-mobile-nav-item.is-active {
+    color: #409eff;
+    background: rgba(64, 158, 255, 0.12);
+  }
+
+  .admin-main,
+  .admin-content {
+    padding-bottom: 70px;
+  }
+
+  .admin-topbar {
+    padding: 0 8px;
+  }
+
+  .admin-user-box {
+    gap: 6px;
+  }
+
+  .admin-user-box :deep(.el-button) {
+    padding: 7px 10px;
+  }
+
+  .tags-view-item {
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tags-view {
+    display: none;
+  }
+
+  .nav-logout-text {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-content {
+    padding: 10px;
+    padding-bottom: 72px;
+  }
+
+  .admin-mobile-bottom-nav {
+    height: 58px;
+  }
+
+  .admin-mobile-nav-item .el-icon {
+    font-size: 18px;
+  }
+
+  .admin-user-avatar {
+    display: none;
+  }
+
+  .main-mobile-nav-item .el-icon {
+    font-size: 18px;
   }
 }
 </style>

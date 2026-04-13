@@ -30,10 +30,24 @@ export const useUserStore = defineStore('user', () => {
     const savedUser = localStorage.getItem('user')
     const savedToken = localStorage.getItem('token')
     if (savedUser) {
-      user.value = normalizeUser(JSON.parse(savedUser))
+      try {
+        user.value = normalizeUser(JSON.parse(savedUser))
+      } catch (error) {
+        // 本地缓存损坏时清理，避免启动阶段抛异常。
+        localStorage.removeItem('user')
+        user.value = null
+      }
     }
     if (savedToken) {
       token.value = savedToken
+    }
+
+    // token 与 user 必须成对存在，避免出现异常登录态。
+    if (!user.value || !token.value) {
+      user.value = null
+      token.value = ''
+      localStorage.removeItem('user')
+      localStorage.removeItem('token')
     }
   }
 
@@ -42,15 +56,20 @@ export const useUserStore = defineStore('user', () => {
     try {
       const response = await userApi.login(username, password)
       if (response.code === 1) {
+        const tokenFromResponse = String(response?.data?.token || '').trim()
+        if (!tokenFromResponse) {
+          return { success: false, message: '登录失败：未获取到有效token' }
+        }
+
         const userData = normalizeUser({
           ...(response.data || {}),
-          password
+          token: tokenFromResponse
         })
         user.value = userData
-        token.value = userData?.token || ''
+        token.value = tokenFromResponse
         // 登录成功后持久化，支持刷新后免登。
         localStorage.setItem('user', JSON.stringify(userData))
-        localStorage.setItem('token', userData?.token || '')
+        localStorage.setItem('token', tokenFromResponse)
         return { success: true }
       } else {
         return { success: false, message: response.msg || '登陆失败' }
@@ -124,8 +143,8 @@ export const useUserStore = defineStore('user', () => {
         oldPassword
       })
       if (response.code === 1) {
-        user.value = normalizeUser({ ...user.value, password })
-        // 密码更新后维持本地 user 与内存一致。
+        // 仅更新非敏感用户信息，不在本地保存密码。
+        user.value = normalizeUser({ ...user.value })
         localStorage.setItem('user', JSON.stringify(user.value))
         return { success: true, message: response.msg || '密码修改成功' }
       }

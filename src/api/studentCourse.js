@@ -36,30 +36,5 @@ export const studentCourseApi = {
   // 兼容旧调用命名
   searchByUserName(nickname) {
     return request.get('/studentCourse/getByUserName', { params: { nickname, userName: nickname } })
-  },
-
-  getAllSelections(pageNum = 1, pageSize = 10) {
-    return request.get('/studentCourse/getAll', { params: { pageNum, pageSize } })
-  },
-
-  getSelectionsByUsername(nickname) {
-    return request.get('/studentCourse/getByUserName', { params: { nickname, userName: nickname } })
-  },
-
-  getCoursesByStudentName(nickname) {
-    return request.get('/studentCourse/getByUserName', { params: { nickname, userName: nickname } })
-  },
-
-  selectCourse(studentId, courseId) {
-    return request.post('/studentCourse/save', { studentId, courseId })
-  },
-
-  dropCourse(id) {
-    return request.delete(`/studentCourse/delByUserName/${id}`)
-  },
-
-  // 已废弃：修改选课进度，请改用 userApi.saveProgress（/user/progress/saveProgress）
-  updateProgress(id, progress) {
-    return request.put('/studentCourse/update', { id, progress })
   }
 }

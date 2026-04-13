@@ -7,29 +7,6 @@
         </div>
       </template>
 
-      <div class="statistics" v-loading="statisticsLoading">
-        <el-space>
-          <div class="stat-item">
-            <div class="stat-label">平均成绩</div>
-            <div class="stat-value">{{ statistics.averageScore || '-' }}</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">最高成绩</div>
-            <div class="stat-value">{{ statistics.maxScore || '-' }}</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">最低成绩</div>
-            <div class="stat-value">{{ statistics.minScore || '-' }}</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">已完成课程</div>
-            <div class="stat-value">{{ statistics.completedCourses || 0 }}</div>
-          </div>
-        </el-space>
-      </div>
-
-      <el-divider />
-
       <div v-if="!isStudent" class="filter-bar">
         <el-input
           v-model="searchUserName"
@@ -78,6 +55,36 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="scores-mobile-list" v-loading="scoresLoading">
+        <div
+          v-for="item in displayedScores"
+          :key="item.backendId || item.displayId"
+          class="scores-mobile-card"
+        >
+          <div class="scores-mobile-title">{{ item.title || '-' }}</div>
+          <div class="scores-mobile-meta">
+            <span>ID：{{ item.displayId }}</span>
+            <span>学生：{{ item.userName || '-' }}</span>
+            <span>教师：{{ item.teacherName || '-' }}</span>
+          </div>
+          <div class="scores-mobile-grid">
+            <span>平时：{{ item.usualScore ?? '-' }}</span>
+            <span>考试：{{ item.examScore ?? '-' }}</span>
+            <span>等级：{{ item.gradeLevel || '-' }}</span>
+            <el-tag :type="getScoreType(item.totalScore)">总分 {{ item.totalScore ?? '-' }}</el-tag>
+          </div>
+          <div class="scores-mobile-remark">备注：{{ item.remark || '-' }}</div>
+          <div v-if="canManageScores" class="scores-mobile-actions">
+            <el-button type="primary" size="small" @click="openScoreDialog(item)">录入成绩</el-button>
+          </div>
+        </div>
+
+        <el-empty
+          v-if="!scoresLoading && displayedScores.length === 0"
+          description="暂无成绩数据"
+        />
+      </div>
 
       <el-pagination
         :current-page="currentPage"
@@ -134,13 +141,6 @@ const canManageScores = computed(() => userStore.isTeacher || userStore.isAdmin)
 const isStudent = computed(() => userStore.isStudent)
 const scores = ref([])
 const scoresLoading = ref(false)
-const statisticsLoading = ref(false)
-const statistics = ref({
-  averageScore: '-',
-  maxScore: '-',
-  minScore: '-',
-  completedCourses: 0
-})
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -204,51 +204,6 @@ const loadScores = async () => {
     ElMessage.error(error.message || '获取成绩列表出错')
   } finally {
     scoresLoading.value = false
-  }
-}
-
-const loadStatistics = async () => {
-  statisticsLoading.value = true
-  try {
-    // 统计与列表复用同一数据源，减少额外接口依赖。
-    const nickname = getCurrentNickname()
-    if (isStudent.value && !nickname) {
-      statistics.value = {
-        averageScore: '-',
-        maxScore: '-',
-        minScore: '-',
-        completedCourses: 0
-      }
-      return
-    }
-
-    const response = isStudent.value
-      ? await scoreApi.getScoreByUserName(nickname)
-      : await scoreApi.getScores(1, 100)
-
-    if (response.code === 1) {
-      const data = response.data
-      let scoresList = []
-      if (data?.rows) {
-        scoresList = Array.isArray(data.rows) ? data.rows : []
-      } else {
-        scoresList = Array.isArray(data) ? data : (Array.isArray(data?.list) ? data.list : [])
-      }
-
-      if (Array.isArray(scoresList) && scoresList.length > 0) {
-        const scores = scoresList.map(item => item.totalScore || 0).filter(s => s > 0)
-        statistics.value = {
-          averageScore: scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : '-',
-          maxScore: scores.length > 0 ? Math.max(...scores) : '-',
-          minScore: scores.length > 0 ? Math.min(...scores) : '-',
-          completedCourses: scoresList.length
-        }
-      }
-    }
-  } catch (error) {
-    ElMessage.error(error.message || '获取成绩统计出错')
-  } finally {
-    statisticsLoading.value = false
   }
 }
 
@@ -389,7 +344,6 @@ const handleSaveScore = async () => {
       ElMessage.success('成绩保存成功')
       scoreDialogVisible.value = false
       loadScores()
-      loadStatistics()
     } else {
       ElMessage.error(response.msg || '成绩保存失败')
     }
@@ -402,7 +356,6 @@ const handleSaveScore = async () => {
 
 onMounted(() => {
   loadScores()
-  loadStatistics()
 })
 </script>
 
@@ -468,81 +421,6 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   margin: 8px 0 18px;
-}
-
-.statistics {
-  margin-bottom: 30px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
-  width: 100%;
-  animation: fadeIn 0.8s ease-out 0.2s backwards;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.stat-item {
-  padding: 30px 25px;
-  background: #87ceeb;
-  border-radius: 16px;
-  min-width: 150px;
-  color: white;
-  box-shadow: 0 8px 20px rgba(var(--theme-primary-rgb), 0.2);
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-item::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 200%;
-  height: 200%;
-  background: #87ceeb;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  pointer-events: none;
-}
-
-.stat-item:hover::before {
-  opacity: 1;
-}
-
-.stat-item:hover {
-  transform: translateY(-8px) scale(1.05);
-  box-shadow: 0 12px 35px rgba(var(--theme-primary-rgb), 0.35);
-}
-
-.stat-label {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.stat-value {
-  font-size: 36px;
-  font-weight: 800;
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.scores-container :deep(.el-divider) {
-  background-color: var(--theme-border-muted);
-  margin: 30px 0;
-  transition: all 0.3s ease;
 }
 
 .scores-container :deep(.el-table) {
@@ -617,6 +495,63 @@ onMounted(() => {
 
 .scores-container :deep(.el-pagination button:hover) {
   color: var(--theme-primary);
+}
+
+.scores-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .scores-container :deep(.el-table) {
+    display: none;
+  }
+
+  .scores-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .scores-mobile-card {
+    border: 1px solid #e4ecf7;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+  }
+
+  .scores-mobile-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1f2d3d;
+  }
+
+  .scores-mobile-meta {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    color: #5f7285;
+    font-size: 12px;
+  }
+
+  .scores-mobile-grid {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    color: #334155;
+    font-size: 13px;
+  }
+
+  .scores-mobile-remark {
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .scores-mobile-actions {
+    margin-top: 8px;
+  }
 }
 </style>
 

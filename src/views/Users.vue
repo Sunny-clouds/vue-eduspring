@@ -77,6 +77,73 @@
         </el-table-column>
           </el-table>
         </div>
+
+        <div class="users-mobile-list" v-loading="loading">
+          <div
+            v-for="item in sortedUserList"
+            :key="item.id || item.displayId"
+            class="users-mobile-card"
+          >
+            <div class="users-mobile-head">
+              <div class="users-mobile-avatar-wrap">
+                <el-image
+                  v-if="item.avatar"
+                  :src="item.avatar"
+                  :preview-src-list="[item.avatar]"
+                  :initial-index="0"
+                  preview-teleported
+                  fit="cover"
+                  class="table-avatar-image"
+                />
+                <el-avatar v-else :size="34">{{ getAvatarFallback(item) }}</el-avatar>
+              </div>
+              <div class="users-mobile-name">
+                <div>{{ item.nickname || item.username || '-' }}</div>
+                <div class="users-mobile-username">@{{ item.username || '-' }}</div>
+              </div>
+            </div>
+
+            <div class="users-mobile-meta">
+              <span>ID：{{ item.displayId }}</span>
+              <span>角色：{{ item.role || '-' }}</span>
+              <span>状态：{{ item.statusText }}</span>
+            </div>
+            <div class="users-mobile-meta">
+              <span>邮箱：{{ item.email || '-' }}</span>
+            </div>
+            <div class="users-mobile-meta">
+              <span>手机：{{ item.phone || '-' }}</span>
+            </div>
+
+            <div class="users-mobile-actions">
+              <el-dropdown @command="(roleCode) => handleSetRole(item, roleCode)">
+                <el-button size="small" type="primary" plain>修改身份</el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="admin">设为管理员</el-dropdown-item>
+                    <el-dropdown-item command="teacher">设为教师</el-dropdown-item>
+                    <el-dropdown-item command="student">设为学生</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+
+              <el-button
+                size="small"
+                :type="item.status === 1 ? 'warning' : 'success'"
+                @click="handleToggleStatus(item)"
+              >
+                {{ item.status === 1 ? '禁用账号' : '启用账号' }}
+              </el-button>
+
+              <el-button size="small" type="danger" @click="handleDelete(item)">删除</el-button>
+            </div>
+          </div>
+
+          <el-empty
+            v-if="!loading && sortedUserList.length === 0"
+            description="暂无用户数据"
+          />
+        </div>
         <div style="margin-top: 16px; text-align: right;">
           <el-pagination
             background
@@ -358,6 +425,65 @@ onMounted(() => {
 .title {
   font-size: 20px;
   font-weight: bold;
+}
+
+.users-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .table-wrap {
+    display: none;
+  }
+
+  .users-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .users-mobile-card {
+    border: 1px solid #e4ecf7;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+  }
+
+  .users-mobile-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .users-mobile-name {
+    min-width: 0;
+    color: #1f2d3d;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .users-mobile-username {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .users-mobile-meta {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    color: #5f7285;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .users-mobile-actions {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }
 </style>
 

@@ -46,6 +46,31 @@
             </el-table-column>
           </el-table>
 
+          <div class="courses-mobile-list" v-loading="allCoursesLoading">
+            <div
+              v-for="item in allCoursesDisplay"
+              :key="item.backendId || item.displayId"
+              class="courses-mobile-card"
+              @click="enterCourseLearning(item)"
+            >
+              <div class="courses-mobile-title">{{ item.title || '-' }}</div>
+              <div class="courses-mobile-meta">
+                <span>讲师：{{ item.teacherName || '-' }}</span>
+                <span>创建：{{ item.createTime || '-' }}</span>
+              </div>
+              <div class="courses-mobile-desc">{{ item.description || '暂无课程描述' }}</div>
+              <div v-if="canManageCourses" class="courses-mobile-actions">
+                <el-button type="primary" size="small" @click.stop="openEditDialog(item)">编辑</el-button>
+                <el-button type="danger" size="small" @click.stop="handleDeleteCourse(item.backendId)">删除</el-button>
+              </div>
+            </div>
+
+            <el-empty
+              v-if="!allCoursesLoading && allCoursesDisplay.length === 0"
+              description="暂无课程"
+            />
+          </div>
+
           <!-- 分页 -->
           <el-pagination
             :current-page="allCoursesPage"
@@ -92,6 +117,38 @@
             </el-table-column>
           </el-table>
 
+          <div class="courses-mobile-list" v-loading="myCoursesLoading">
+            <div
+              v-for="item in myCoursesDisplay"
+              :key="item.backendId || item.displayId"
+              class="courses-mobile-card"
+              @click="enterCourseLearning(item)"
+            >
+              <div class="courses-mobile-title">{{ item.title || '-' }}</div>
+              <div class="courses-mobile-meta">
+                <span>讲师：{{ item.teacherName || '-' }}</span>
+                <span>状态：{{ item.statusText || '-' }}</span>
+                <span>进度：{{ item.progressText || '-' }}</span>
+              </div>
+              <div class="courses-mobile-desc">选课时间：{{ item.selectTime || '-' }}</div>
+              <div class="courses-mobile-actions">
+                <el-button
+                  type="danger"
+                  size="small"
+                  @click.stop="handleDropCourse(item.backendId)"
+                  :loading="droppingCourse === item.backendId"
+                >
+                  退课
+                </el-button>
+              </div>
+            </div>
+
+            <el-empty
+              v-if="!myCoursesLoading && myCoursesDisplay.length === 0"
+              description="暂无选课"
+            />
+          </div>
+
           <!-- 分页 -->
           <el-pagination
             :current-page="myCoursesPage"
@@ -133,6 +190,27 @@
             <el-table-column prop="progress" label="学习进度" width="110" align="center" />
             <el-table-column prop="createTime" label="选课时间" width="180" />
           </el-table>
+
+          <div class="courses-mobile-list" v-loading="allSelectionsLoading">
+            <div
+              v-for="item in allSelectionsDisplay"
+              :key="item.backendId || item.displayId"
+              class="courses-mobile-card"
+            >
+              <div class="courses-mobile-title">{{ item.courseTitle || '-' }}</div>
+              <div class="courses-mobile-meta">
+                <span>学生：{{ item.username || '-' }}</span>
+                <span>讲师：{{ item.teacherName || '-' }}</span>
+                <span>进度：{{ item.progress || '-' }}</span>
+              </div>
+              <div class="courses-mobile-desc">选课时间：{{ item.createTime || '-' }}</div>
+            </div>
+
+            <el-empty
+              v-if="!allSelectionsLoading && allSelectionsDisplay.length === 0"
+              description="暂无选课记录"
+            />
+          </div>
 
           <el-pagination
             :current-page="allSelectionsPage"
@@ -975,6 +1053,57 @@ onMounted(() => {
 
 :deep(.el-pagination .active) {
   color: var(--theme-primary);
+}
+
+.courses-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .courses-container :deep(.el-table) {
+    display: none;
+  }
+
+  .courses-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .courses-mobile-card {
+    border: 1px solid #e4ecf7;
+    border-radius: 12px;
+    background: #fff;
+    padding: 12px;
+  }
+
+  .courses-mobile-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1f2d3d;
+  }
+
+  .courses-mobile-meta {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    color: #5f7285;
+  }
+
+  .courses-mobile-desc {
+    margin-top: 8px;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .courses-mobile-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 }
 </style>
 

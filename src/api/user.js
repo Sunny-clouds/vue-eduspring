@@ -29,11 +29,6 @@ export const userApi = {
     return request.get('/user/teacherList')
   },
 
-  // 兼容旧命名
-  getTeachers() {
-    return request.get('/user/teacherList')
-  },
-
   // 保存视频学习进度
   saveProgress(data) {
     return request.post('/user/progress/saveProgress', data)

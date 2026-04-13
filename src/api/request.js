@@ -9,17 +9,26 @@ const normalizeAuthToken = (token) => {
   return String(token).trim()
 }
 
+// 统一读取接口基地址：
+// - 开发环境默认走 /api（由 devServer 代理）
+// - 生产环境优先走环境变量，未配置时回退到 /api
+const apiBaseURL = process.env.NODE_ENV === 'production'
+  ? (process.env.VUE_APP_API_BASE_URL || '/api')
+  : '/api'
+
 // 创建 axios 实例
 // 开发环境使用相对路径（通过代理）
 // 生产环境可以配置绝对路径
 const instance = axios.create({
-  baseURL: process.env.NODE_ENV === 'production' ? 'http://localhost:8080' : '/api',
+  baseURL: apiBaseURL,
   timeout: 10000
 })
 
 // 请求拦截器
 instance.interceptors.request.use(
   config => {
+    config.headers = config.headers || {}
+
     if (config?.skipAuth) {
       // skipAuth 场景下显式移除鉴权头。
       if (config.headers) {
@@ -32,11 +41,10 @@ instance.interceptors.request.use(
     // 从 localStorage 获取 token 并添加到请求头
     const token = normalizeAuthToken(localStorage.getItem('token'))
     if (token) {
-      // 同时兼容后端读取 token / Authorization 两种方式。
       config.headers.token = token
-      config.headers.Authorization = token.startsWith('Bearer ')
-        ? token
-        : `Bearer ${token}`
+      if (config.headers.Authorization) {
+        delete config.headers.Authorization
+      }
     }
     return config
   },
@@ -47,9 +55,11 @@ instance.interceptors.request.use(
 instance.interceptors.response.use(
   response => response.data,
   error => {
+    const requestUrl = String(error.config?.url || '')
+    const isLoginRequest = /\/user\/login(?:\?|$)/.test(requestUrl)
     const status = error.response?.status
 
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !isLoginRequest) {
       // token 过期，清除本地 token 并跳转到登陆页
       localStorage.removeItem('token')
       localStorage.removeItem('user')
@@ -59,8 +69,10 @@ instance.interceptors.response.use(
     const responseData = error.response?.data
     const responseText = typeof responseData === 'string' ? responseData.trim() : ''
     const responseObj = responseData && typeof responseData === 'object' ? responseData : {}
+    const isCredentialError = isLoginRequest && (status === 401 || status === 403)
     // 提供更详细的错误信息（兼容后端异常常见字段）。
-    const errorMessage = responseObj.msg ||
+    const errorMessage = (isCredentialError ? '账号或密码错误' : '') ||
+          responseObj.msg ||
           responseObj.message ||
           responseObj.error ||
           responseText ||

@@ -98,4 +98,44 @@ const goTo = (path) => {
   color: #64748b;
   line-height: 1.6;
 }
+
+@media (max-width: 768px) {
+  .admin-dashboard {
+    padding: 18px 14px;
+  }
+
+  .hero {
+    padding: 22px 16px;
+    border-radius: 14px;
+  }
+
+  .hero h1 {
+    font-size: 24px;
+  }
+
+  .hero p {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .admin-grid {
+    margin-top: 16px;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-dashboard {
+    padding: 12px 10px;
+  }
+
+  .card-title {
+    font-size: 16px;
+  }
+
+  .card-desc {
+    font-size: 13px;
+  }
+}
 </style>
