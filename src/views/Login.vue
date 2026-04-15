@@ -147,10 +147,7 @@ const switchToRegister = () => {
   align-items: center;
   justify-content: center;
   padding: 28px;
-  background:
-    radial-gradient(circle at 12% 16%, rgba(15, 118, 110, 0.2) 0, transparent 36%),
-    radial-gradient(circle at 88% 84%, rgba(245, 158, 11, 0.22) 0, transparent 34%),
-    linear-gradient(145deg, #f8fafc 0%, #f1f5f9 55%, #ecfeff 100%);
+  background: #f4f7fb;
   font-family: 'Manrope', 'Segoe UI', sans-serif;
 }
 
@@ -173,7 +170,7 @@ const switchToRegister = () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.84));
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .brand-row {
@@ -190,7 +187,7 @@ const switchToRegister = () => {
   place-items: center;
   color: #ffffff;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
+  background: var(--brand-a);
   box-shadow: 0 10px 22px rgba(15, 118, 110, 0.35);
 }
 
@@ -243,7 +240,7 @@ const switchToRegister = () => {
   font-weight: 700;
   letter-spacing: 0.02em;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--brand-a), var(--brand-b)) !important;
+  background: var(--brand-a) !important;
   box-shadow: 0 14px 30px rgba(14, 165, 164, 0.34);
 }
 

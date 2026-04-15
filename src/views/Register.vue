@@ -245,10 +245,7 @@ const switchToLogin = () => {
   align-items: center;
   justify-content: center;
   padding: 28px;
-  background:
-    radial-gradient(circle at 15% 14%, rgba(15, 118, 110, 0.2) 0, transparent 36%),
-    radial-gradient(circle at 86% 82%, rgba(251, 191, 36, 0.2) 0, transparent 34%),
-    linear-gradient(145deg, #f8fafc 0%, #f1f5f9 55%, #ecfeff 100%);
+  background: #f4f7fb;
   font-family: 'Manrope', 'Segoe UI', sans-serif;
 }
 
@@ -270,7 +267,7 @@ const switchToLogin = () => {
   padding: 36px 44px 30px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.84));
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .brand-row {
@@ -287,7 +284,7 @@ const switchToLogin = () => {
   place-items: center;
   color: #ffffff;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
+  background: var(--brand-a);
   box-shadow: 0 10px 22px rgba(15, 118, 110, 0.35);
 }
 
@@ -341,7 +338,7 @@ const switchToLogin = () => {
   border-radius: 14px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  background: linear-gradient(135deg, var(--brand-a), var(--brand-b)) !important;
+  background: var(--brand-a) !important;
   box-shadow: 0 14px 30px rgba(14, 165, 164, 0.34);
 }
 
