@@ -378,7 +378,37 @@
 .member-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 14px;
+}
+
+.member-metric-chart {
+  background: linear-gradient(135deg, #f5faff 0%, #ffffff 100%);
+  border: 1px solid #dce7f2;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.member-metric-chart:hover {
+  box-shadow: 0 4px 16px rgba(22, 119, 255, 0.12);
+  border-color: #b3d8f9;
+}
+
+.member-metric-chart .chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5f738c;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.member-chart {
+  width: 100%;
+  height: 160px;
 }
 
 .member-metric-item {
@@ -404,7 +434,7 @@
   border-top: 1px solid #edf1f6;
   padding: 12px 14px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 

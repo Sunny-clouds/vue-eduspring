@@ -269,6 +269,8 @@ const saveStudentAnswers = async () => {
   if (response?.code !== 1) {
     throw new Error(response?.msg || '学生答案提交失败')
   }
+
+  return response?.data
 }
 
 const normalizePaperQuestions = (paperData = {}) => {
@@ -311,26 +313,27 @@ const stopTimer = () => {
   }
 }
 
-const resolveCurrentStudentId = () => {
-  const user = userStore.user || {}
-  const candidates = [user.id, user.userId, user.uid, user.studentId, route.query.studentId]
-  for (const value of candidates) {
-    const sid = Number(value)
-    if (Number.isFinite(sid) && sid > 0) {
-      return sid
-    }
-  }
-  return null
-}
-
 const normalizeOwnScoreValue = (data) => {
+  // If data is directly a number (score value), return it
+  const directScore = Number(data)
+  if (Number.isFinite(directScore)) {
+    return String(directScore)
+  }
+
   const rows = Array.isArray(data?.rows)
     ? data.rows
     : (Array.isArray(data?.list) ? data.list : null)
   const source = rows && rows.length > 0
     ? rows[0]
-    : (data?.scoreDto || data?.studentScore || data)
-  const score = Number(source?.totalScore ?? source?.score ?? source?.examScore)
+    : (data?.scoreDto || data?.studentScore || data?.studentPaper || data?.data || data)
+  const score = Number(
+    source?.totalScore
+    ?? source?.score
+    ?? source?.examScore
+    ?? data?.totalScore
+    ?? data?.score
+    ?? data?.examScore
+  )
   return Number.isFinite(score) ? String(score) : '-'
 }
 
@@ -371,36 +374,14 @@ const resolveShowResultFlag = async () => {
   return false
 }
 
-const showScoreAfterSubmitIfNeeded = async () => {
+const showScoreAfterSubmitIfNeeded = async (scoreData) => {
   const canShowResultNow = await resolveShowResultFlag()
   if (!canShowResultNow) {
     return
   }
 
-  const studentId = resolveCurrentStudentId()
-  if (!Number.isFinite(studentId) || studentId <= 0) {
-    ElMessage.warning('未获取到当前学生ID，暂时无法显示成绩')
-    return
-  }
-
-  const currentPaperId = Number(
-    paperId.value
-    ?? studentPaperRef.value?.paperId
-    ?? route.query.paperId
-  )
-  if (!Number.isFinite(currentPaperId) || currentPaperId <= 0) {
-    ElMessage.warning('未获取到试卷ID，暂时无法显示成绩')
-    return
-  }
-
   try {
-    const response = await examApi.getScoreByStudentIdAndPaperId(studentId, currentPaperId)
-    if (response?.code !== 1) {
-      ElMessage.warning(response?.msg || '成绩查询失败，请稍后在考试信息页查看')
-      return
-    }
-
-    const scoreText = normalizeOwnScoreValue(response?.data)
+    const scoreText = normalizeOwnScoreValue(scoreData)
     await ElMessageBox.alert(
       `已提交成功<br/>我的成绩：${scoreText}`,
       '考试成绩',
@@ -411,7 +392,7 @@ const showScoreAfterSubmitIfNeeded = async () => {
       }
     )
   } catch (error) {
-    ElMessage.warning(error.message || '成绩查询失败，请稍后在考试信息页查看')
+    ElMessage.warning(error.message || '成绩展示失败，请稍后在考试信息页查看')
   }
 }
 
@@ -428,7 +409,7 @@ const navigateBackToExamInfo = () => {
   })
 }
 
-const finalizeSubmitExam = async ({ reason = 'manual', tipText = '试卷提交成功' } = {}) => {
+const finalizeSubmitExam = async ({ reason = 'manual', tipText = '试卷提交成功', scoreData = null } = {}) => {
   const sessionKey = String(sessionKeyRef.value || '')
   const answers = buildSubmitAnswers()
 
@@ -449,7 +430,7 @@ const finalizeSubmitExam = async ({ reason = 'manual', tipText = '试卷提交�
   }
 
   ElMessage.success(tipText)
-  await showScoreAfterSubmitIfNeeded()
+  await showScoreAfterSubmitIfNeeded(scoreData)
   navigateBackToExamInfo()
 }
 
@@ -482,8 +463,8 @@ const handleSubmitExam = async () => {
   isSubmitting.value = true
   stopTimer()
   try {
-    await saveStudentAnswers()
-    await finalizeSubmitExam({ reason: 'manual', tipText: '试卷提交成功' })
+    const scoreData = await saveStudentAnswers()
+    await finalizeSubmitExam({ reason: 'manual', tipText: '试卷提交成功', scoreData })
   } catch (error) {
     ElMessage.error(error.message || '提交试卷失败')
   } finally {
@@ -500,8 +481,8 @@ const autoSubmitExam = async () => {
   isSubmitting.value = true
   stopTimer()
   try {
-    await saveStudentAnswers()
-    await finalizeSubmitExam({ reason: 'timeout', tipText: '考试时间到，已自动交卷' })
+    const scoreData = await saveStudentAnswers()
+    await finalizeSubmitExam({ reason: 'timeout', tipText: '考试时间到，已自动交卷', scoreData })
   } catch (error) {
     ElMessage.error(error.message || '自动交卷失败，请联系老师处理')
   } finally {

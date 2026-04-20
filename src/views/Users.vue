@@ -56,7 +56,6 @@
                 <el-button size="small" type="primary" plain>修改身份</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="admin">设为管理员</el-dropdown-item>
                     <el-dropdown-item command="teacher">设为教师</el-dropdown-item>
                     <el-dropdown-item command="student">设为学生</el-dropdown-item>
                   </el-dropdown-menu>
@@ -120,7 +119,6 @@
                 <el-button size="small" type="primary" plain>修改身份</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="admin">设为管理员</el-dropdown-item>
                     <el-dropdown-item command="teacher">设为教师</el-dropdown-item>
                     <el-dropdown-item command="student">设为学生</el-dropdown-item>
                   </el-dropdown-menu>

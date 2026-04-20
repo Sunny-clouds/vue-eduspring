@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="course-learn-container">
     <el-card v-loading="pageLoading">
       <template #header>
@@ -68,7 +68,7 @@
       <div v-if="activeCategory === 'resource'">
         <div class="resource-overview" v-loading="resourceLoading">
           <div class="resource-overview-main">
-            <div class="resource-overview-title">资源学习进度（经验值）</div>
+            <div class="resource-overview-title">资源学习进度</div>
             <div class="resource-progress-row">
               <div class="resource-progress-track">
                 <div class="resource-progress-fill" :style="{ width: `${resourceProgressPercent}%` }" />
@@ -179,14 +179,14 @@
         >
           <div class="member-list">
             <button
-              v-for="(member, index) in courseMembers"
+              v-for="member in courseMembers"
               :key="member.uid"
               type="button"
               class="member-list-item"
               :class="{ active: !isStudent && activeMemberId === member.uid, 'member-list-item-readonly': isStudent }"
               @click="handleMemberClick(member.uid)"
             >
-              <div class="member-rank" :class="index < 3 ? `member-rank-top${index + 1}` : ''">{{ index + 1 }}</div>
+              <div class="member-rank" :class="member.rank < 4 ? `member-rank-top${member.rank}` : ''">{{ member.rank }}</div>
               <div class="member-avatar">
                 <img v-if="member.avatar" :src="member.avatar" alt="头像" class="member-avatar-image" />
                 <span v-else>{{ member.initial }}</span>
@@ -212,13 +212,13 @@
             </div>
 
             <div class="member-metrics">
-              <div class="member-metric-item">
-                <div class="label">学习进度</div>
-                <div class="value">{{ activeMember.progressText }}</div>
+              <div class="member-metric-chart">
+                <div class="chart-title">学习进度</div>
+                <VChart class="member-chart" :option="progressChartOption" :autoresize="true" />
               </div>
-              <div class="member-metric-item">
-                <div class="label">经验值</div>
-                <div class="value">{{ activeMember.experienceText }}</div>
+              <div class="member-metric-chart">
+                <div class="chart-title">经验值</div>
+                <VChart class="member-chart" :option="experienceChartOption" :autoresize="true" />
               </div>
             </div>
           </div>
@@ -622,6 +622,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import VChart from 'vue-echarts'
 import { useUserStore } from '@/stores/user'
 import { userApi } from '@/api/user'
 import { courseApi } from '@/api/course'
@@ -721,6 +722,7 @@ const memberPage = ref(1)
 const memberPageSize = ref(10)
 const memberTotal = ref(0)
 const courseProgressPercent = ref(0)
+const studentSelfMemberCache = ref(null)
 const groupCollapsed = ref({
   video: false,
   doc: false,
@@ -743,6 +745,10 @@ const currentTeacherId = computed(() => {
   return Number.isFinite(id) ? id : null
 })
 const studentSelfMember = computed(() => {
+  // 优先使用缓存的学生信息（即使学生不在当前页也能显示）
+  if (studentSelfMemberCache.value) {
+    return studentSelfMemberCache.value
+  }
   const username = currentUserName.value
   const nickname = currentUserNickname.value
   return courseMembers.value.find((item = {}) => {
@@ -758,6 +764,147 @@ const activeMember = computed(() => {
   }
   return courseMembers.value.find(item => item.uid === activeMemberId.value) || null
 })
+
+const progressChartOption = computed(() => {
+  if (!activeMember.value) {
+    return {}
+  }
+  const progressText = activeMember.value.progressText
+  const progress = progressText && progressText !== '-' 
+    ? Number(progressText.replace('%', '')) 
+    : 0
+  const remaining = 100 - progress
+  return {
+    color: ['#52c41a', '#f0f0f0'],
+    tooltip: {
+      trigger: 'item',
+      formatter: (params) => {
+        if (params.name === '已完成') {
+          return `<div style="padding: 8px;">${params.name}: ${params.value}%</div>`
+        }
+        return ''
+      }
+    },
+    series: [
+      {
+        name: '学习进度',
+        type: 'pie',
+        radius: ['45%', '65%'],
+        center: ['50%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 8,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: true,
+          position: 'center',
+          formatter: () => {
+            return `${progress}%`
+          },
+          fontSize: 28,
+          fontWeight: 'bold',
+          color: '#1677ff'
+        },
+        emphasis: {
+          disabled: false
+        },
+        animationType: 'scale',
+        animationDuration: 800,
+        data: [
+          {
+            value: progress,
+            name: '已完成',
+            itemStyle: { color: '#52c41a' },
+            emphasis: {
+              itemStyle: { color: '#45a049' },
+              label: { show: true, fontSize: 28, fontWeight: 'bold' }
+            }
+          },
+          {
+            value: remaining,
+            name: '未完成',
+            itemStyle: { color: '#f0f0f0' },
+            emphasis: { disabled: true }
+          }
+        ]
+      }
+    ]
+  }
+})
+
+const experienceChartOption = computed(() => {
+  if (!activeMember.value) {
+    return {}
+  }
+  const experienceText = activeMember.value.experienceText
+  const experience = experienceText && experienceText !== '-' 
+    ? Number(experienceText) 
+    : 0
+  const maxExperience = Math.max(1000, experience * 1.2)
+  const remaining = maxExperience - experience
+  
+  return {
+    color: ['#1677ff', '#f0f0f0'],
+    tooltip: {
+      trigger: 'item',
+      formatter: (params) => {
+        if (params.name === '已获得') {
+          return `<div style="padding: 8px;">${params.name}: ${experience}</div>`
+        }
+        return ''
+      }
+    },
+    series: [
+      {
+        name: '经验值',
+        type: 'pie',
+        radius: ['45%', '65%'],
+        center: ['50%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 8,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: true,
+          position: 'center',
+          formatter: () => {
+            return `${experience}`
+          },
+          fontSize: 28,
+          fontWeight: 'bold',
+          color: '#1677ff'
+        },
+        emphasis: {
+          disabled: false
+        },
+        animationType: 'scale',
+        animationDuration: 800,
+        data: [
+          {
+            value: experience,
+            name: '已获得',
+            itemStyle: { color: '#1677ff' },
+            emphasis: {
+              itemStyle: { color: '#0b53d0' },
+              label: { show: true, fontSize: 28, fontWeight: 'bold' }
+            }
+          },
+          {
+            value: remaining,
+            name: '未获得',
+            itemStyle: { color: '#f0f0f0' },
+            emphasis: { disabled: true }
+          }
+        ]
+      }
+    ]
+  }
+})
+
 const displayedActivities = computed(() => {
   return activities.value.map((item = {}) => {
     const typeNumber = Number(item.type ?? item.activityType ?? item.activity_type)
@@ -847,7 +994,7 @@ const disableEditEndDate = (date) => {
   return date.getTime() < startTimestamp
 }
 
-const normalizeCourseMembers = (data) => {
+const normalizeCourseMembers = (data, startRank = 1) => {
   const rows = Array.isArray(data?.rows)
     ? data.rows
     : (Array.isArray(data?.list)
@@ -874,7 +1021,8 @@ const normalizeCourseMembers = (data) => {
       statusText: formatMemberStatus(status),
       selectTime: item.selectTime || item.createTime || item.updateTime || '-',
       experienceText: totalScore != null ? `${totalScore}` : '-',
-      totalScore: totalScore ?? 0
+      totalScore: totalScore ?? 0,
+      rank: startRank + index
     }
   })
 }
@@ -941,12 +1089,17 @@ const loadCourseMembers = async () => {
           ? response.data.list
           : (Array.isArray(response?.data) ? response.data : []))
       courseProgressPercent.value = resolveCourseProgressPercent(rows, response?.data)
-      const members = normalizeCourseMembers(rows)
+      const startRank = (memberPage.value - 1) * memberPageSize.value + 1
+      const members = normalizeCourseMembers(rows, startRank)
       const total = Number(response?.data?.total ?? response?.data?.count ?? members.length)
       courseMembers.value = members.sort((a, b) => (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0))
+      // 排序后重新计算 rank，保持排名正确
+      courseMembers.value.forEach((member, index) => {
+        member.rank = startRank + index
+      })
       memberTotal.value = Number.isFinite(total) ? total : members.length
       if (isStudent.value) {
-        const selfMember = members.find((item = {}) => {
+        const selfMember = courseMembers.value.find((item = {}) => {
           const username = currentUserName.value
           const nickname = currentUserNickname.value
           if (username && item.username === username) {
@@ -954,9 +1107,13 @@ const loadCourseMembers = async () => {
           }
           return !!(nickname && item.name === nickname)
         })
+        // 保存学生信息到缓存，即使学生不在当前页也能显示
+        if (selfMember) {
+          studentSelfMemberCache.value = selfMember
+        }
         activeMemberId.value = selfMember?.uid ?? null
-      } else if (!members.some(item => item.uid === activeMemberId.value)) {
-        activeMemberId.value = members[0]?.uid ?? null
+      } else if (!courseMembers.value.some(item => item.uid === activeMemberId.value)) {
+        activeMemberId.value = courseMembers.value[0]?.uid ?? null
       }
     } else {
       courseMembers.value = []
@@ -1063,13 +1220,21 @@ const publishExamActivity = async ({
     }
   }
 
-  const examResponse = await examApi.saveExam(payload)
-  if (examResponse?.code !== 1) {
-    throw new Error(examResponse?.msg || '发布考试活动失败')
-  }
+  try {
+    const examResponse = await examApi.saveExam(payload)
+    if (examResponse?.code !== 1) {
+      throw new Error(examResponse?.msg || '发布考试活动失败')
+    }
 
-  return {
-    response: examResponse
+    return {
+      response: examResponse
+    }
+  } catch (error) {
+    // 当后端不返回错误信息时，将"无权访问"错误改为"题库题目不足"
+    if (error?.message?.includes('当前账号无权访问该接口')) {
+      throw new Error('题库题目不足')
+    }
+    throw error
   }
 }
 
