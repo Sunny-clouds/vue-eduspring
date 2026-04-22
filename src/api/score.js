@@ -11,6 +11,11 @@ export const scoreApi = {
     return request.get('/score/getScoreByUserName', { params: { nickname, username: nickname, userName: nickname } })
   },
 
+  // 老师根据学生姓名查询成绩
+  getScoreByNameTeacher(username) {
+    return request.get('/score/getScoreByNameTeacher', { params: { username } })
+  },
+
   // 根据课程名查询成绩
   getScoreByCourseId(title, pageNum = 1, pageSize = 10) {
     return request.get('/score/getScoreByTitle', { params: { title, pageNum, pageSize } })

@@ -17,14 +17,21 @@
         />
         <el-button type="primary" @click="handleSearchByUserName">搜索学生</el-button>
 
-        <el-input
-          v-model="searchCourseTitle"
-          placeholder="输入课程名搜索成绩"
+        <el-select
+          v-model="selectedCourseTitle"
+          placeholder="选择课程查看学生成绩"
           clearable
-          style="width: 220px"
-          @keyup.enter="handleSearchByCourseId"
-        />
-        <el-button type="primary" @click="handleSearchByCourseId">搜索课程</el-button>
+          style="width: 240px"
+          :loading="coursesLoading"
+          @change="handleSelectCourse"
+        >
+          <el-option
+            v-for="course in teacherCourses"
+            :key="course.id"
+            :label="course.title || course.name"
+            :value="course.title || course.name"
+          />
+        </el-select>
         <el-button @click="resetSearch">重置</el-button>
       </div>
 
@@ -100,20 +107,17 @@
 
       <el-dialog v-model="scoreDialogVisible" title="录入/修改成绩" width="520px">
         <el-form :model="scoreForm" label-width="100px">
-          <el-form-item label="ID">
-            <el-input v-model="scoreForm.displayId" disabled />
-          </el-form-item>
-          <el-form-item label="学生ID" required>
-            <el-input-number v-model="scoreForm.studentId" :min="1" />
+          <el-form-item label="学生姓名">
+            <el-input v-model="scoreForm.userName" disabled />
           </el-form-item>
           <el-form-item label="平时成绩" required>
             <el-input-number v-model="scoreForm.usualScore" :min="0" :max="100" :precision="1" :step="0.5" />
           </el-form-item>
-          <el-form-item label="考试成绩" required>
-            <el-input-number v-model="scoreForm.examScore" :min="0" :max="100" :precision="1" :step="0.5" />
+          <el-form-item label="考试成绩">
+            <el-input-number v-model="scoreForm.examScore" disabled :min="0" :max="100" :precision="1" :step="0.5" />
           </el-form-item>
-          <el-form-item label="教师ID" required>
-            <el-input-number v-model="scoreForm.teacherId" :min="1" />
+          <el-form-item label="总成绩">
+            <el-input v-model="calculatedTotalScore" disabled />
           </el-form-item>
           <el-form-item label="备注">
             <el-input v-model="scoreForm.remark" placeholder="请输入备注" />
@@ -131,6 +135,7 @@
 <script setup name="ScoresPage">
 import { computed, ref, onMounted } from 'vue'
 import { scoreApi } from '@/api/score'
+import { courseApi } from '@/api/course'
 import { useUserStore } from '@/stores/user'
 import { normalizeTableData, addDisplayId } from '@/utils/table'
 import { ElMessage } from 'element-plus'
@@ -146,14 +151,16 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const searchUserName = ref('')
-const searchCourseTitle = ref('')
+const selectedCourseTitle = ref('')
+const teacherCourses = ref([])
+const coursesLoading = ref(false)
 const skipNextPaginationChange = ref(false)
 const scoreDialogVisible = ref(false)
 const savingScore = ref(false)
 const scoreForm = ref({
   backendId: '',
-  displayId: '',
   studentId: 1,
+  userName: '',
   usualScore: 0,
   examScore: 0,
   teacherId: 1,
@@ -166,6 +173,14 @@ const displayedScores = computed(() => {
     ...item,
     backendId: item.id
   }))
+})
+
+// 计算总成绩：平时成绩 * 40% + 考试成绩 * 60%
+const calculatedTotalScore = computed(() => {
+  const usualScore = Number(scoreForm.value.usualScore) || 0
+  const examScore = Number(scoreForm.value.examScore) || 0
+  const total = usualScore * 0.4 + examScore * 0.6
+  return total.toFixed(1)
 })
 
 const getCurrentNickname = () => String(userStore.user?.nickname || '').trim()
@@ -229,7 +244,7 @@ const handleSearchByUserName = async () => {
   // 用户名搜索后重置到第一页，确保展示结果与页码一致。
   scoresLoading.value = true
   try {
-    const response = await scoreApi.getScoreByUserName(username)
+    const response = await scoreApi.getScoreByNameTeacher(username)
     if (response.code === 1) {
       const { rows, total: count } = normalizeTableData(response.data)
       scores.value = rows
@@ -248,38 +263,32 @@ const handleSearchByUserName = async () => {
   }
 }
 
-const handleSearchByCourseId = async () => {
-  const title = searchCourseTitle.value.trim()
+const handleSelectCourse = async () => {
+  const title = selectedCourseTitle.value.trim()
   if (!title) {
-    ElMessage.warning('请输入课程名')
+    // 如果清空选择，回到加载全部成绩
+    if (currentPage.value !== 1 || pageSize.value !== 10) {
+      skipNextPaginationChange.value = true
+      currentPage.value = 1
+      pageSize.value = 10
+    }
+    loadScores()
     return
   }
 
   scoresLoading.value = true
   try {
-    const nickname = getCurrentNickname()
-    if (isStudent.value && !nickname) {
-      ElMessage.warning('未获取到当前用户信息，请重新登录')
-      return
-    }
-
-    // 学生无课程搜索接口时，走本人成绩后端返回并在前端过滤。
-    const response = isStudent.value
-      ? await scoreApi.getScoreByUserName(nickname)
-      : await scoreApi.getScoreByCourseId(title, 1, 5)
+    // 调用根据课程名查询成绩的接口
+    const response = await scoreApi.getScoreByCourseId(title, 1, 100)
 
     if (response.code === 1) {
       const { rows } = normalizeTableData(response.data)
-      const filteredRows = isStudent.value
-        ? rows.filter(item => String(item?.title || '').toLowerCase().includes(title.toLowerCase()))
-        : rows
-
-      scores.value = filteredRows
-      total.value = filteredRows.length
-      if (currentPage.value !== 1 || pageSize.value !== 5) {
+      scores.value = rows
+      total.value = rows.length
+      if (currentPage.value !== 1 || pageSize.value !== 100) {
         skipNextPaginationChange.value = true
         currentPage.value = 1
-        pageSize.value = 5
+        pageSize.value = 100
       }
     } else {
       ElMessage.error(response.msg || '查询成绩失败')
@@ -294,7 +303,7 @@ const handleSearchByCourseId = async () => {
 const resetSearch = () => {
   // 重置搜索条件和分页参数后重新拉取默认列表。
   searchUserName.value = ''
-  searchCourseTitle.value = ''
+  selectedCourseTitle.value = ''
   if (currentPage.value !== 1 || pageSize.value !== 10) {
     skipNextPaginationChange.value = true
     currentPage.value = 1
@@ -303,12 +312,40 @@ const resetSearch = () => {
   loadScores()
 }
 
+const loadTeacherCourses = async () => {
+  if (isStudent.value) {
+    return
+  }
+
+  const teacherId = userStore.user?.id
+  if (!Number.isFinite(teacherId) || teacherId <= 0) {
+    return
+  }
+
+  coursesLoading.value = true
+  try {
+    const response = await courseApi.getByTeaId(teacherId)
+    if (response.code === 1) {
+      const courseList = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.rows) ? response.data.rows : [])
+      teacherCourses.value = courseList
+    } else {
+      ElMessage.warning('获取课程列表失败')
+    }
+  } catch (error) {
+    ElMessage.warning(error.message || '获取课程列表出错')
+  } finally {
+    coursesLoading.value = false
+  }
+}
+
 const openScoreDialog = (row) => {
   // 录入弹窗使用行数据做兜底转换，避免空值导致提交异常。
   scoreForm.value = {
     backendId: row.backendId || row.id || '',
-    displayId: row.displayId || '',
     studentId: Number(row.studentId) || 1,
+    userName: row.userName || '-',
     usualScore: Number(row.usualScore) || 0,
     examScore: Number(row.examScore) || 0,
     teacherId: Number(row.teacherId) || Number(userStore.user?.id) || 1,
@@ -323,20 +360,17 @@ const handleSaveScore = async () => {
     return
   }
 
-  if (!scoreForm.value.backendId || !scoreForm.value.studentId) {
-    ElMessage.warning('缺少成绩ID或学生ID')
+  if (!scoreForm.value.backendId) {
+    ElMessage.warning('缺少成绩ID')
     return
   }
 
-  // 提交统一映射为后端 setScore 所需参数结构。
+  // 提交 ScoreDto 对象，包含 id、usualScore、remark
   savingScore.value = true
   try {
     const response = await scoreApi.setScore({
       id: scoreForm.value.backendId,
-      studentId: scoreForm.value.studentId,
       usualScore: scoreForm.value.usualScore,
-      examScore: scoreForm.value.examScore,
-      teacherId: scoreForm.value.teacherId,
       remark: scoreForm.value.remark || ''
     })
 
@@ -356,6 +390,7 @@ const handleSaveScore = async () => {
 
 onMounted(() => {
   loadScores()
+  loadTeacherCourses()
 })
 </script>
 

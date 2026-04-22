@@ -314,10 +314,13 @@ const stopTimer = () => {
 }
 
 const normalizeOwnScoreValue = (data) => {
-  // If data is directly a number (score value), return it
+  // If data is directly a number (score value), return it with empty attempt
   const directScore = Number(data)
   if (Number.isFinite(directScore)) {
-    return String(directScore)
+    return {
+      score: String(directScore),
+      attempt: ''
+    }
   }
 
   const rows = Array.isArray(data?.rows)
@@ -334,7 +337,11 @@ const normalizeOwnScoreValue = (data) => {
     ?? data?.score
     ?? data?.examScore
   )
-  return Number.isFinite(score) ? String(score) : '-'
+  const attempt = Number(source?.attempt ?? source?.studentAttempt ?? source?.attemptCount ?? data?.attempt)
+  return {
+    score: Number.isFinite(score) ? String(score) : '-',
+    attempt: Number.isFinite(attempt) && attempt > 0 ? String(attempt) : ''
+  }
 }
 
 const resolveShowResultFlag = async () => {
@@ -381,9 +388,12 @@ const showScoreAfterSubmitIfNeeded = async (scoreData) => {
   }
 
   try {
-    const scoreText = normalizeOwnScoreValue(scoreData)
+    const scoreInfo = normalizeOwnScoreValue(scoreData)
+    const scoreText = scoreInfo?.score || '-'
+    const attemptText = scoreInfo?.attempt || ''
+    const attemptDisplay = attemptText ? `<br/>考试次数：${attemptText}` : ''
     await ElMessageBox.alert(
-      `已提交成功<br/>我的成绩：${scoreText}`,
+      `已提交成功<br/>我的成绩：${scoreText}${attemptDisplay}`,
       '考试成绩',
       {
         dangerouslyUseHTMLString: true,

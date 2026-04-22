@@ -60,7 +60,8 @@
 
       <div v-if="isStudent && hasOwnScore" class="my-score-card">
         <div class="my-score-label">我的成绩</div>
-        <div class="my-score-value">{{ ownScoreText }}</div>
+        <div class="my-score-value">{{ ownScoreText.score }}</div>
+        <div v-if="ownScoreText.attempt" class="my-score-attempt">考试次数：{{ ownScoreText.attempt }}</div>
       </div>
 
       <el-dialog
@@ -120,7 +121,10 @@ const updating = ref(false)
 const loadingMyScore = ref(false)
 const editDialogVisible = ref(false)
 const examDetailRaw = ref({})
-const ownScoreText = ref('')
+const ownScoreText = ref({
+  score: '',
+  attempt: ''
+})
 const editForm = ref({
   durationText: '60分钟',
   totalScore: '',
@@ -268,7 +272,7 @@ const canShowStudentScoreNow = computed(() => {
 })
 
 const showEndedStudentScoreCard = computed(() => isStudent.value && isExamEnded.value)
-const hasOwnScore = computed(() => String(ownScoreText.value || '').trim() !== '')
+const hasOwnScore = computed(() => String(ownScoreText.value?.score || '').trim() !== '')
 
 const primaryActionText = computed(() => {
   if (showEndedStudentScoreCard.value) {
@@ -297,11 +301,15 @@ const normalizeOwnScoreValue = (data) => {
     ? rows[0]
     : (data?.scoreDto || data?.studentScore || data)
   const score = Number(source?.totalScore ?? source?.score ?? source?.examScore)
-  return Number.isFinite(score) ? String(score) : ''
+  const attempt = Number(source?.attempt ?? source?.studentAttempt ?? source?.attemptCount ?? data?.attempt)
+  return {
+    score: Number.isFinite(score) ? String(score) : '',
+    attempt: Number.isFinite(attempt) && attempt > 0 ? String(attempt) : ''
+  }
 }
 
 const loadOwnScoreForPanel = async () => {
-  ownScoreText.value = ''
+  ownScoreText.value = { score: '', attempt: '' }
   if (!isStudent.value || !canShowStudentScoreNow.value) {
     return
   }
@@ -353,12 +361,15 @@ const loadOwnScore = async () => {
   try {
     const response = await examApi.getScoreByStudentIdAndPaperId(studentId, paperId)
     if (response?.code === 1) {
-      const scoreText = normalizeOwnScoreValue(response?.data) || '-'
+      const scoreData = normalizeOwnScoreValue(response?.data)
+      const scoreText = scoreData?.score || '-'
+      const attemptText = scoreData?.attempt || '-'
       const title = String(examDetailRaw.value?.title || '-').trim() || '-'
       const totalScore = Number(examDetailRaw.value?.totalScore)
       const totalScoreText = Number.isFinite(totalScore) ? `${totalScore}` : '-'
+      const attemptDisplay = attemptText !== '-' ? `<br/>考试次数：${attemptText}` : ''
       await ElMessageBox.alert(
-        `考试：${title}<br/>总分：${totalScoreText}<br/>我的成绩：${scoreText}`,
+        `考试：${title}<br/>总分：${totalScoreText}<br/>我的成绩：${scoreText}${attemptDisplay}`,
         '考试成绩',
         {
           dangerouslyUseHTMLString: true,
@@ -803,6 +814,12 @@ onMounted(async () => {
   line-height: 1;
   font-weight: 700;
   color: #14532d;
+}
+
+.my-score-attempt {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #5f7a66;
 }
 
 @media (max-width: 768px) {

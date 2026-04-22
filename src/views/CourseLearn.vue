@@ -1581,14 +1581,23 @@ const goActivityComments = async (row) => {
           ?? firstRow?.score
           ?? firstRow?.examScore
         )
+        const attempt = Number(
+          firstRow?.attempt
+          ?? scoreData?.attempt
+          ?? firstRow?.studentAttempt
+          ?? scoreData?.studentAttempt
+          ?? firstRow?.attemptCount
+          ?? scoreData?.attemptCount
+        )
 
         const examTitle = String(examData.title || row.title || '').trim() || '-'
         const totalScore = Number(examData.totalScore)
         const totalScoreText = Number.isFinite(totalScore) ? `${totalScore}` : '-'
 
         if (Number.isFinite(score)) {
+          const attemptDisplay = Number.isFinite(attempt) && attempt > 0 ? `<br/>考试次数：${attempt}` : ''
           await ElMessageBox.alert(
-            `考试：${examTitle}<br/>总分：${totalScoreText}<br/>我的成绩：${score}`,
+            `考试：${examTitle}<br/>总分：${totalScoreText}<br/>我的成绩：${score}${attemptDisplay}`,
             '考试成绩',
             {
               dangerouslyUseHTMLString: true,
