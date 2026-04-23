@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="exam-info-page">
     <el-card class="exam-info-card" v-loading="loading">
       <template #header>
@@ -278,7 +278,10 @@ const primaryActionText = computed(() => {
   if (showEndedStudentScoreCard.value) {
     return '查看我的成绩'
   }
-  return '开始考试'
+  if (canEditExamConfig.value) {
+    return '查看试题'
+  }
+  return '寮€濮嬭€冭瘯'
 })
 
 const resolveCurrentStudentId = () => {
@@ -418,9 +421,9 @@ const loadExamInfo = async () => {
       examDetailRaw.value = response.data || {}
       return
     }
-    ElMessage.warning(response?.msg || '获取考试信息失败')
+    ElMessage.warning(response?.msg || '鑾峰彇考试信息澶辫触')
   } catch (error) {
-    ElMessage.error(error.message || '获取考试信息出错')
+    ElMessage.error(error.message || '鑾峰彇考试信息鍑洪敊')
   } finally {
     loading.value = false
   }
@@ -428,7 +431,7 @@ const loadExamInfo = async () => {
 
 const openEditDialog = () => {
   if (!canEditExamConfig.value) {
-    ElMessage.warning('仅教师或管理员可修改考试信息')
+    ElMessage.warning('浠呮暀甯堟垨绠＄悊鍛樺彲修改考试信息')
     return
   }
   if (!isExamNotStarted.value) {
@@ -455,7 +458,7 @@ const openEditDialog = () => {
 
 const handleUpdateExam = async () => {
   if (!canEditExamConfig.value) {
-    ElMessage.warning('仅教师或管理员可修改考试信息')
+    ElMessage.warning('浠呮暀甯堟垨绠＄悊鍛樺彲修改考试信息')
     return
   }
   if (!isExamNotStarted.value) {
@@ -571,6 +574,22 @@ const startExam = async () => {
     return
   }
 
+  if (canEditExamConfig.value) {
+    router.push({
+      name: 'QuestionStats',
+      params: { id: aid },
+      query: {
+        paperId: String(paperId),
+        courseId: String(route.query.courseId || ''),
+        courseTitle: route.query.courseTitle || '',
+        teacherName: route.query.teacherName || '',
+        activityTitle: String(route.query.activityTitle || examDetailRaw.value?.title || '').trim(),
+        bizId: String(bizId.value || '')
+      }
+    })
+    return
+  }
+
   const duration = Number(examDetailRaw.value?.duration)
   if (!Number.isFinite(duration) || duration <= 0) {
     ElMessage.warning('未获取到考试总时长，无法开始考试')
@@ -623,7 +642,7 @@ const startExam = async () => {
 
   try {
     await ElMessageBox.confirm(
-      `本次考试总时长为 ${duration} 分钟，确认开始考试吗？`,
+      `本次考试总时长为 ${duration} 分钟锛岀‘璁ゅ紑濮嬭€冭瘯吗？`,
       '开始考试确认',
       {
         type: 'warning',
@@ -635,7 +654,7 @@ const startExam = async () => {
     if (error === 'cancel' || error === 'close') {
       return
     }
-    ElMessage.error(error.message || '确认开始考试失败')
+    ElMessage.error(error.message || '纭寮€濮嬭€冭瘯澶辫触')
     return
   }
 
@@ -643,7 +662,7 @@ const startExam = async () => {
   try {
     const paperResponse = await testPaperApi.getTestPaperById(paperId)
     if (paperResponse?.code !== 1) {
-      ElMessage.error('开始考试失败，请稍后重试')
+      ElMessage.error('寮€濮嬭€冭瘯澶辫触锛岃绋嶅悗閲嶈瘯')
       return
     }
 
@@ -832,3 +851,8 @@ onMounted(async () => {
   }
 }
 </style>
+
+
+
+
+

@@ -15,6 +15,9 @@ const ActivityDiscussionDetail = () => import('@/views/ActivityDiscussionDetail.
 const ExamActivityInfo = () => import('@/views/ExamActivityInfo.vue')
 const ExamTaking = () => import('@/views/ExamTaking.vue')
 const ExamStudentPapers = () => import('@/views/ExamStudentPapers.vue')
+const HomeworkSubmit = () => import('@/views/HomeworkSubmit.vue')
+const HomeworkDetail = () => import('@/views/HomeworkDetail.vue')
+const QuestionStats = () => import('@/views/QuestionStats.vue')
 const QuestionBank = () => import('@/views/QuestionBank.vue')
 const Profile = () => import('@/views/Profile.vue')
 const Users = () => import('@/views/Users.vue')
@@ -96,6 +99,24 @@ const routes = [
     path: '/activity/:id/exam-student-papers',
     name: 'ExamStudentPapers',
     component: ExamStudentPapers,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/activity/:id/homework-submit',
+    name: 'HomeworkSubmit',
+    component: HomeworkSubmit,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/activity/:id/homework-detail',
+    name: 'HomeworkDetail',
+    component: HomeworkDetail,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/activity/:id/question-stats',
+    name: 'QuestionStats',
+    component: QuestionStats,
     meta: { requiresAuth: true }
   },
   {

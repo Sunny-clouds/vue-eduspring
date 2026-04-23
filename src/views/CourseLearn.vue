@@ -922,9 +922,11 @@ const displayedActivities = computed(() => {
     const activityProgressText = notStarted ? '未开始' : (ended ? '已结束' : '进行中')
     const progressTagType = notStarted ? 'warning' : (ended ? 'info' : 'success')
     const participantCount = Number(
-      typeNumber === 2
-        ? (item.examSum ?? item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0)
-        : (item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0)
+      typeNumber === 1
+        ? (item.homeworkSum ?? item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0)
+        : (typeNumber === 2
+          ? (item.examSum ?? item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0)
+          : (item.participantCount ?? item.joinCount ?? item.attendCount ?? item.memberCount ?? item.studentCount ?? item.commentCount ?? 0))
     )
     return {
     ...item,
@@ -1633,6 +1635,23 @@ const goActivityComments = async (row) => {
         activityTitle: String(row.title || '').trim(),
         startTime: String(row.startTime || row.start_time || ''),
         bizId: String(bizId)
+      }
+    })
+    return
+  }
+
+  if (activityType === 1) {
+    const routeName = isStudent.value ? 'HomeworkSubmit' : 'HomeworkDetail'
+    router.push({
+      name: routeName,
+      params: { id: activityId },
+      query: {
+        courseId: String(courseId.value || ''),
+        courseTitle: courseTitle.value || '',
+        teacherName: teacherName.value || '',
+        activityTitle: String(row.title || '').trim(),
+        endTime: String(row.endTime || row.end_time || ''),
+        ended: row?.ended ? '1' : '0'
       }
     })
     return

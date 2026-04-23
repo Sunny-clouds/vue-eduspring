@@ -40,6 +40,7 @@
         stripe
         style="width: 100%"
         v-loading="scoresLoading"
+        :row-key="(row) => row.backendId || row.displayId"
       >
         <el-table-column prop="displayId" label="ID" width="80" />
         <el-table-column prop="userName" label="学生名" width="100" />
@@ -56,7 +57,7 @@
         <el-table-column prop="gradeLevel" label="等级" width="80" align="center" />
         <el-table-column prop="teacherName" label="授课老师" width="100" />
         <el-table-column prop="remark" label="备注" />
-        <el-table-column v-if="canManageScores" label="操作" width="120" align="center" fixed="right">
+        <el-table-column v-if="canManageScores" label="操作" width="120" align="center">
           <template #default="scope">
             <el-button type="primary" size="small" @click="openScoreDialog(scope.row)">录入成绩</el-button>
           </template>
@@ -195,6 +196,9 @@ const handlePaginationChange = () => {
 }
 
 const loadScores = async () => {
+  if (scoresLoading.value) {
+    return
+  }
   scoresLoading.value = true
   try {
     // 学生固定查询本人；教师/管理员按分页查询全部。

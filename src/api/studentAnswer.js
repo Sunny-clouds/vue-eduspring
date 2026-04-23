@@ -12,5 +12,10 @@ export const studentAnswerApi = {
         }
       }
     )
+  },
+
+  // 获取试卷的学生答题统计（StudentAnswerVo列表）
+  getStudentAnswerByPaperId(paperId) {
+    return request.get(`/studentAnswer/getStudentAnswerByPaperId/${paperId}`)
   }
 }
