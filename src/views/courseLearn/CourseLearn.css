@@ -667,6 +667,13 @@
   color: #0ea5e9;
 }
 
+.resource-item-progress {
+  color: #16a34a;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
 .resource-item-meta {
   color: #909399;
   font-size: 13px;

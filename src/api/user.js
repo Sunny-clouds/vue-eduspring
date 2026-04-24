@@ -1,7 +1,7 @@
 import request from './request'
 
 export const userApi = {
-  // 用户登陆
+  // 用户登录
   login(username, password) {
     return request.post('/user/login', {
       username,
@@ -32,5 +32,13 @@ export const userApi = {
   // 保存视频学习进度
   saveProgress(data) {
     return request.post('/user/progress/saveProgress', data)
+  },
+
+  // 获取学生在当前课程下的视频学习进度
+  getProgress(courseId, studentId) {
+    return request.post('/user/progress/getProgress', {
+      courseId,
+      studentId
+    })
   }
 }

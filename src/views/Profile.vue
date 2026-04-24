@@ -87,40 +87,6 @@
             </el-form-item>
           </el-form>
         </el-tab-pane>
-
-        <el-tab-pane label="统计数据" name="statistics">
-          <div v-if="!isStudent" class="admin-statistics-empty">
-            当前管理员或教师账号不展示学生学习统计，也不会再请求学生选课与成绩接口。
-          </div>
-          <div v-else class="statistics" v-loading="statisticsLoading">
-            <el-space wrap>
-              <div class="stat-item">
-                <div class="stat-label">选课数</div>
-                <div class="stat-value">{{ statistics.coursesCount || 0 }}</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">完成课程</div>
-                <div class="stat-value">{{ statistics.completedCourses || 0 }}</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">总学分</div>
-                <div class="stat-value">{{ statistics.totalCredits || 0 }}</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">发布帖子</div>
-                <div class="stat-value">{{ statistics.discussionCount || 0 }}</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">论坛回复</div>
-                <div class="stat-value">{{ statistics.repliesCount || 0 }}</div>
-              </div>
-              <div class="stat-item">
-                <div class="stat-label">平均成绩</div>
-                <div class="stat-value">{{ statistics.averageScore || '-' }}</div>
-              </div>
-            </el-space>
-          </div>
-        </el-tab-pane>
       </el-tabs>
 
       <div class="mobile-logout-wrap">
@@ -134,19 +100,15 @@
 </template>
 
 <script setup name="ProfilePage">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { uploadApi } from '@/api/upload'
-import { scoreApi } from '@/api/score'
-import { studentCourseApi } from '@/api/studentCourse'
 import { ElMessage } from 'element-plus'
 import { SwitchButton } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const router = useRouter()
-const isStudent = computed(() => userStore.isStudent)
-
 const activeTab = ref('basic')
 const userLoading = ref(false)
 const userForm = ref({
@@ -244,16 +206,6 @@ const passwordForm = ref({
   oldPassword: '',
   newPassword: '',
   confirmPassword: ''
-})
-
-const statisticsLoading = ref(false)
-const statistics = ref({
-  coursesCount: 0,
-  completedCourses: 0,
-  totalCredits: 0,
-  discussionCount: 0,
-  repliesCount: 0,
-  averageScore: '-'
 })
 
 const loadUserInfo = async () => {
@@ -362,99 +314,8 @@ const handleChangePassword = async () => {
   }
 }
 
-const loadStatistics = async () => {
-  if (!isStudent.value) {
-    statistics.value = {
-      coursesCount: 0,
-      completedCourses: 0,
-      totalCredits: 0,
-      discussionCount: 0,
-      repliesCount: 0,
-      averageScore: '-'
-    }
-    return
-  }
-
-  statisticsLoading.value = true
-  try {
-    const nickname = userStore.user?.nickname
-    const username = userStore.user?.username
-    if (!nickname || !username) {
-      statistics.value = {
-        coursesCount: 0,
-        completedCourses: 0,
-        totalCredits: 0,
-        discussionCount: 0,
-        repliesCount: 0,
-        averageScore: '-'
-      }
-      return
-    }
-
-    const [courseRes, scoreRes] = await Promise.allSettled([
-      studentCourseApi.searchByUserName(nickname),
-      scoreApi.getScoreByUserName(username)
-    ])
-
-    let courseList = []
-    if (courseRes.status === 'fulfilled' && courseRes.value?.code === 1) {
-      const data = courseRes.value.data
-      if (Array.isArray(data?.rows)) {
-        courseList = data.rows
-      } else if (Array.isArray(data?.list)) {
-        courseList = data.list
-      } else if (Array.isArray(data)) {
-        courseList = data
-      }
-    }
-
-    let scoreList = []
-    if (scoreRes.status === 'fulfilled' && scoreRes.value?.code === 1) {
-      const data = scoreRes.value.data
-      if (Array.isArray(data?.rows)) {
-        scoreList = data.rows
-      } else if (Array.isArray(data?.list)) {
-        scoreList = data.list
-      } else if (Array.isArray(data)) {
-        scoreList = data
-      }
-    }
-
-    const validScores = scoreList
-      .map(item => Number(item.totalScore || item.examScore || 0))
-      .filter(score => Number.isFinite(score) && score > 0)
-
-    statistics.value = {
-      coursesCount: courseList.length,
-      completedCourses: courseList.filter(item => Number(item.progress) >= 100).length,
-      totalCredits: 0,
-      discussionCount: 0,
-      repliesCount: 0,
-      averageScore: validScores.length > 0
-        ? (validScores.reduce((sum, score) => sum + score, 0) / validScores.length).toFixed(2)
-        : '-'
-    }
-
-    if (courseRes.status === 'rejected' && scoreRes.status === 'rejected') {
-      ElMessage.warning('统计接口暂不可用，已显示默认值')
-    }
-  } catch (error) {
-    statistics.value = {
-      coursesCount: 0,
-      completedCourses: 0,
-      totalCredits: 0,
-      discussionCount: 0,
-      repliesCount: 0,
-      averageScore: '-'
-    }
-  } finally {
-    statisticsLoading.value = false
-  }
-}
-
 onMounted(() => {
   loadUserInfo()
-  loadStatistics()
 })
 
 const handleProfileLogout = () => {

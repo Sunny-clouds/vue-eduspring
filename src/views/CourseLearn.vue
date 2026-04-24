@@ -54,19 +54,10 @@
         >
           活动（{{ activityCount }}）
         </button>
-        <button
-          v-if="canViewAllCategories"
-          type="button"
-          class="category-item"
-          :class="{ active: activeCategory === 'message' }"
-          @click="activeCategory = 'message'"
-        >
-          消息（{{ messageCount }}）
-        </button>
       </div>
 
       <div v-if="activeCategory === 'resource'">
-        <div class="resource-overview" v-loading="resourceLoading">
+        <div v-if="showStudentResourceProgress" class="resource-overview" v-loading="resourceLoading">
           <div class="resource-overview-main">
             <div class="resource-overview-title">资源学习进度</div>
             <div class="resource-progress-row">
@@ -121,6 +112,9 @@
                     >
                       {{ item.resourceName }}
                     </button>
+                    <div v-if="showStudentResourceProgress && item.videoProgressText" class="resource-item-progress">
+                      {{ item.videoProgressText }}
+                    </div>
                     <div class="resource-item-meta">
                       <span>允许下载</span>
                       <span>|</span>
@@ -334,10 +328,6 @@
           :inline-end-time="activeActivityRow.endTime || ''"
           @back="activeActivityRow = null"
         />
-      </div>
-
-      <div v-else-if="canViewAllCategories && activeCategory === 'message'" class="category-placeholder">
-        <el-empty description="消息模块开发中" />
       </div>
 
       <el-dialog
@@ -688,7 +678,6 @@ const lastReportedDurationMap = ref({})
 const progressReportInFlight = ref(false)
 const activeCategory = ref('resource')
 const activityCount = ref(0)
-const messageCount = ref(0)
 const activityLoading = ref(false)
 const activeActivityRow = ref(null)
 const creatingActivity = ref(false)
@@ -722,6 +711,8 @@ const memberPage = ref(1)
 const memberPageSize = ref(10)
 const memberTotal = ref(0)
 const courseProgressPercent = ref(0)
+const studentVideoProgressList = ref([])
+const studentVideoProgressMap = ref({})
 const studentSelfMemberCache = ref(null)
 const groupCollapsed = ref({
   video: false,
@@ -734,12 +725,22 @@ const courseId = computed(() => Number(route.params.id))
 const courseTitle = computed(() => String(route.query.title || '').trim())
 const teacherName = computed(() => String(route.query.teacherName || '').trim())
 const isStudent = computed(() => userStore.isStudent)
+const showStudentResourceProgress = computed(() => isStudent.value)
 const canManageResources = computed(() => userStore.isAdmin || userStore.isTeacher)
 const canPublishActivity = computed(() => userStore.isAdmin || userStore.isTeacher)
 const canAccessResources = computed(() => !isStudent.value || selectedInCurrentCourse.value)
 const canViewAllCategories = computed(() => !isStudent.value || selectedInCurrentCourse.value)
 const currentUserName = computed(() => String(userStore.user?.username || userStore.user?.userName || '').trim())
 const currentUserNickname = computed(() => String(userStore.user?.nickname || userStore.user?.nickName || '').trim())
+const currentStudentId = computed(() => {
+  const id = Number(
+    userStore.user?.id
+    ?? userStore.user?.userId
+    ?? userStore.user?.uid
+    ?? userStore.user?.studentId
+  )
+  return Number.isFinite(id) ? id : null
+})
 const currentTeacherId = computed(() => {
   const id = Number(userStore.user?.id)
   return Number.isFinite(id) ? id : null
@@ -770,9 +771,11 @@ const progressChartOption = computed(() => {
     return {}
   }
   const progressText = activeMember.value.progressText
-  const progress = progressText && progressText !== '-' 
-    ? Number(progressText.replace('%', '')) 
-    : 0
+  const progress = isStudent.value
+    ? resourceProgressPercent.value
+    : (progressText && progressText !== '-'
+      ? Number(progressText.replace('%', ''))
+      : 0)
   const remaining = 100 - progress
   return {
     color: ['#52c41a', '#f0f0f0'],
@@ -839,11 +842,11 @@ const experienceChartOption = computed(() => {
     return {}
   }
   const experienceText = activeMember.value.experienceText
-  const experience = experienceText && experienceText !== '-' 
-    ? Number(experienceText) 
+  const rawExperience = experienceText && experienceText !== '-'
+    ? Number(experienceText)
     : 0
-  const maxExperience = Math.max(1000, experience * 1.2)
-  const remaining = maxExperience - experience
+  const experience = Math.min(100, Math.max(0, rawExperience))
+  const remaining = 100 - experience
   
   return {
     color: ['#1677ff', '#f0f0f0'],
@@ -872,7 +875,7 @@ const experienceChartOption = computed(() => {
           show: true,
           position: 'center',
           formatter: () => {
-            return `${experience}`
+            return `${rawExperience}`
           },
           fontSize: 28,
           fontWeight: 'bold',
@@ -1676,6 +1679,12 @@ const normalizeResourceList = (data) => {
     })
     const size = Number(item.size ?? item.fileSize ?? 0)
     const duration = Number(item.duration ?? item.videoDuration ?? 0)
+    const progressValue = Number(
+      studentVideoProgressMap.value[String(item.id ?? item.resourceId ?? item.courseResourceId ?? '')]
+    )
+    const videoProgressText = previewCategory === 'video' && Number.isFinite(progressValue)
+      ? `已观看 ${Math.min(100, Math.max(0, progressValue)).toFixed(2).replace(/\.00$/, '')}%`
+      : ''
     return {
       ...item,
       displayId: index + 1,
@@ -1687,7 +1696,8 @@ const normalizeResourceList = (data) => {
       previewCategory,
       badgeText: resolveBadgeText(previewCategory, resourceName),
       sizeText: formatFileSize(size),
-      durationText: previewCategory === 'video' ? formatDurationLabel(duration) : ''
+      durationText: previewCategory === 'video' ? formatDurationLabel(duration) : '',
+      videoProgressText
     }
   })
 }
@@ -1736,8 +1746,44 @@ const filteredResourceGroups = computed(() => {
 })
 
 const totalResourceCount = computed(() => courseResourceList.value.length)
-const learnedResourceCount = computed(() => (canAccessResources.value ? totalResourceCount.value : 0))
-const resourceProgressPercent = computed(() => (canAccessResources.value ? courseProgressPercent.value : 0))
+const learnedResourceCount = computed(() => {
+  if (!showStudentResourceProgress.value) {
+    return 0
+  }
+  return studentVideoProgressList.value.length
+})
+const resourceProgressPercent = computed(() => {
+  if (!showStudentResourceProgress.value) {
+    return 0
+  }
+  if (totalResourceCount.value <= 0) {
+    return 0
+  }
+  return Math.round((learnedResourceCount.value / totalResourceCount.value) * 100)
+})
+
+const normalizeStudentVideoProgress = (data) => {
+  const rows = Array.isArray(data?.rows)
+    ? data.rows
+    : (Array.isArray(data?.list)
+      ? data.list
+      : (Array.isArray(data) ? data : []))
+
+  const progressMap = rows.reduce((acc, item = {}) => {
+      const videoId = Number(item.videoId ?? item.resourceId ?? item.id)
+      const progress = Number(item.progress)
+      if (!Number.isFinite(videoId) || videoId <= 0 || !Number.isFinite(progress)) {
+        return acc
+      }
+      acc.set(videoId, Math.min(100, Math.max(0, progress)))
+      return acc
+    }, new Map())
+
+  return Array.from(progressMap.entries()).map(([videoId, progress]) => ({
+    videoId,
+    progress
+  }))
+}
 
 const toggleGroup = (key) => {
   groupCollapsed.value[key] = !groupCollapsed.value[key]
@@ -1875,6 +1921,44 @@ const loadCourseResources = async () => {
     ElMessage.error(error.message || '获取课程资源出错')
   } finally {
     resourceLoading.value = false
+  }
+}
+
+const loadStudentVideoProgress = async () => {
+  if (!isStudent.value) {
+    studentVideoProgressList.value = []
+    studentVideoProgressMap.value = {}
+    return
+  }
+
+  const studentId = currentStudentId.value
+  if (!Number.isFinite(courseId.value) || !Number.isFinite(studentId)) {
+    studentVideoProgressList.value = []
+    studentVideoProgressMap.value = {}
+    return
+  }
+
+  try {
+    const response = await userApi.getProgress(courseId.value, studentId)
+    if (response?.code !== 1) {
+      studentVideoProgressList.value = []
+      studentVideoProgressMap.value = {}
+      return
+    }
+
+    const progressRows = normalizeStudentVideoProgress(response.data)
+    studentVideoProgressList.value = progressRows
+    studentVideoProgressMap.value = progressRows.reduce((acc, item) => {
+      acc[String(item.videoId)] = item.progress
+      return acc
+    }, {})
+
+    if (courseResourceList.value.length > 0) {
+      courseResourceList.value = normalizeResourceList(courseResourceList.value)
+    }
+  } catch (error) {
+    studentVideoProgressList.value = []
+    studentVideoProgressMap.value = {}
   }
 }
 
@@ -2167,11 +2251,18 @@ const handlePreviewVideoLoaded = () => {
 
 const handlePreviewClose = async () => {
   const video = previewVideoRef.value
+  const shouldRefreshStudentProgress = isStudent.value && previewType.value === 'video'
+
   if (video && previewType.value === 'video') {
     previewPositionMap.value[previewUrl.value] = Number(video.currentTime || 0)
     video.pause()
     await reportVideoProgress({ force: true })
   }
+
+  if (shouldRefreshStudentProgress) {
+    await loadStudentVideoProgress()
+  }
+
   currentPreviewResource.value = null
   previewDialogVisible.value = false
 }
@@ -2201,6 +2292,7 @@ onMounted(async () => {
   await loadStudentSelectionStatus()
   await loadCourseMembers()
   await loadActivities()
+  await loadStudentVideoProgress()
 
   await loadCourseResources()
   pageLoading.value = false
