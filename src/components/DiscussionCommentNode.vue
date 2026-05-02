@@ -8,6 +8,9 @@
 
     <div class="comment-main">
       <div class="comment-author-line">
+        <el-tag v-if="isTeacherComment" class="comment-role-tag" type="success" size="small" effect="light">
+          老师
+        </el-tag>
         <span class="comment-author">{{ comment.username || '匿名用户' }}</span>
       </div>
 
@@ -189,6 +192,7 @@ const parentUsername = computed(() => props.parentUsername)
 const nextDepth = computed(() => (props.depth > 0 ? 1 : props.depth + 1))
 const isReplyingCurrent = computed(() => Number(props.replyingCommentId) === Number(props.comment?.id))
 const showToggle = computed(() => hasChildren.value && props.depth === 0)
+const isTeacherComment = computed(() => Number(props.comment?.role) === 2)
 const isCommentLiked = computed(() => {
   if (!props.likedCommentIds || typeof props.likedCommentIds.has !== 'function') {
     return false
@@ -222,13 +226,23 @@ const isCommentLiked = computed(() => {
 }
 
 .comment-author-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 6px;
 }
 
 .comment-author {
+  order: 1;
   font-size: 14px;
   color: #61666d;
   font-weight: 600;
+}
+
+.comment-role-tag {
+  order: 2;
+  height: 20px;
+  line-height: 18px;
 }
 
 .comment-content {

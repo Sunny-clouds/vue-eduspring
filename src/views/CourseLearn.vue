@@ -679,6 +679,7 @@ const progressReportInFlight = ref(false)
 const activeCategory = ref('resource')
 const activityCount = ref(0)
 const activityLoading = ref(false)
+const activitiesLoaded = ref(false)
 const activeActivityRow = ref(null)
 const creatingActivity = ref(false)
 const deletingActivityId = ref(null)
@@ -961,6 +962,9 @@ const handleMemberClick = (uid) => {
 const handleActivityTabClick = () => {
   activeCategory.value = 'activity'
   activeActivityRow.value = null
+  if (!activitiesLoaded.value && !activityLoading.value) {
+    loadActivities()
+  }
 }
 
 const goBack = () => {
@@ -1146,14 +1150,17 @@ const loadActivities = async () => {
       const total = Number(response?.data?.total ?? response?.data?.count ?? rows.length)
       activities.value = rows
       activityCount.value = Number.isFinite(total) ? total : rows.length
+      activitiesLoaded.value = true
     } else {
       activities.value = []
       activityCount.value = 0
+      activitiesLoaded.value = false
       ElMessage.warning(response?.msg || '获取活动失败')
     }
   } catch (error) {
     activities.value = []
     activityCount.value = 0
+    activitiesLoaded.value = false
     ElMessage.warning(error.message || '获取活动出错')
   } finally {
     activityLoading.value = false
@@ -1821,6 +1828,15 @@ const loadStudentSelectionStatus = async () => {
     return
   }
 
+  const selectedFromRoute = String(route.query.selected || '').trim()
+  if (selectedFromRoute === '1' || selectedFromRoute === '0') {
+    selectedInCurrentCourse.value = selectedFromRoute === '1'
+    if (!selectedInCurrentCourse.value && activeCategory.value !== 'resource') {
+      activeCategory.value = 'resource'
+    }
+    return
+  }
+
   const nickname = String(userStore.user?.nickname || '').trim()
   if (!nickname) {
     selectedInCurrentCourse.value = false
@@ -2299,7 +2315,7 @@ onMounted(async () => {
 })
 
 watch(activeCategory, async (value) => {
-  if (value === 'activity' && canViewAllCategories.value) {
+  if (value === 'activity' && canViewAllCategories.value && !activitiesLoaded.value && !activityLoading.value) {
     await loadActivities()
   }
 })

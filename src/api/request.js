@@ -10,11 +10,8 @@ const normalizeAuthToken = (token) => {
 }
 
 // 统一读取接口基地址：
-// - 开发环境默认走 /api（由 devServer 代理）
-// - 生产环境优先走环境变量，未配置时回退到 /api
-const apiBaseURL = process.env.NODE_ENV === 'production'
-  ? (process.env.VUE_APP_API_BASE_URL || '/api')
-  : '/api'
+const apiBaseURL = process.env.VUE_APP_API_BASE_URL || '/api'
+
 
 // 创建 axios 实例
 // 开发环境使用相对路径（通过代理）

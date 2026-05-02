@@ -319,6 +319,7 @@ const allCoursesLoading = ref(false)
 const myCoursesLoading = ref(false)
 const allSelectionsLoading = ref(false)
 const droppingCourse = ref(null)
+const hasLoadedMyCourses = ref(false)
 
 const allCoursesPage = ref(1)
 const myCoursesPage = ref(1)
@@ -565,6 +566,7 @@ const loadMyCourses = async () => {
   if (!isStudent.value) {
     myCourses.value = []
     myCoursesTotal.value = 0
+    hasLoadedMyCourses.value = false
     return
   }
 
@@ -591,6 +593,7 @@ const loadMyCourses = async () => {
           : `${item.progress}%`
       }))
       myCoursesTotal.value = total || rows.length
+      hasLoadedMyCourses.value = true
     } else {
       ElMessage.error(response.msg || '获取选课列表失败')
     }
@@ -674,7 +677,7 @@ const resetSelectionsSearch = () => {
 
 const handleTabClick = (tabPane) => {
   // 标签页切换时按需拉取，避免一次性请求全部数据。
-  if (isStudent.value && tabPane?.paneName === 'my') {
+  if (isStudent.value && tabPane?.paneName === 'my' && !hasLoadedMyCourses.value) {
     myCoursesPage.value = 1
     loadMyCourses()
   }
@@ -866,12 +869,28 @@ const enterCourseLearning = async (course) => {
     return
   }
 
+  const selectionKnown = isStudent.value && hasLoadedMyCourses.value
+  const isSelectedCourse = selectionKnown
+    ? myCourses.value.some((item = {}) => {
+      const selectedCourseId = resolveCourseId(item)
+      const selectedTitle = String(item.title || item.courseTitle || item.courseName || '').trim()
+      const targetTitle = String(course?.title || course?.courseTitle || course?.courseName || '').trim()
+
+      if (selectedCourseId !== null && selectedCourseId === courseId) {
+        return true
+      }
+
+      return !!(targetTitle && selectedTitle && selectedTitle === targetTitle)
+    })
+    : false
+
   router.push({
     name: 'CourseLearn',
     params: { id: courseId },
     query: {
       title: String(course?.title || course?.courseTitle || ''),
-      teacherName: String(course?.teacherName || course?.teacher || '')
+      teacherName: String(course?.teacherName || course?.teacher || ''),
+      selected: selectionKnown ? (isSelectedCourse ? '1' : '0') : undefined
     }
   })
 }
